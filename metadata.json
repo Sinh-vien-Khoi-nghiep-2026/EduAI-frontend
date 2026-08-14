@@ -1,0 +1,6 @@
+{
+  "name": "Etutor Multi-Agent",
+  "description": "An intelligent LMS middleware layer powered by Multi-Agent AI (Teaching, Exercise, Evaluation) grounded in course knowledge bases.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

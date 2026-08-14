@@ -1,21 +1,20 @@
-# bun-react-tailwind-template
+<div align="center">
+<img width="1200" height="475" alt="GHBanner" src="https://ai.google.dev/static/site-assets/images/share-ais-513315318.png" />
+</div>
 
-To install dependencies:
+# Run and deploy your AI Studio app
 
-```bash
-bun install
-```
+This contains everything you need to run your app locally.
 
-To start a development server:
+View your app in AI Studio: https://ai.studio/apps/8301d868-8eb4-4c6a-9027-1cda05680c43
 
-```bash
-bun dev
-```
+## Run Locally
 
-To run for production:
+**Prerequisites:**  Node.js
 
-```bash
-bun start
-```
 
-This project was created using `bun init` in bun v1.3.14. [Bun](https://bun.com) is a fast all-in-one JavaScript runtime.
+1. Install dependencies:
+   `npm install`
+2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
+3. Run the app:
+   `npm run dev`

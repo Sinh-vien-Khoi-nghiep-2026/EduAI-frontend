@@ -1,51 +1,20 @@
 @import "tailwindcss";
 
-@layer base {
-  :root {
-    @apply text-[rgba(255,255,255,0.87)] bg-[#242424] font-sans;
-  }
-
-  body {
-    /* @apply grid place-items-center min-w-[320px] min-h-screen relative m-0; */
-    @apply flex flex-col min-h-screen w-full relative m-0 overflow-x-hidden ;
-  }
+@theme {
+  --color-sage-50: #f8f9f8;
+  --color-sage-100: #e8eae8;
+  --color-sage-200: #e1e4e1;
+  --color-sage-300: #d1d4d1;
+  --color-sage-400: #7b897b;
+  --color-sage-500: #5c6c5c;
+  --color-sage-600: #4f6d58;
+  --color-sage-700: #3e5746;
+  --color-sage-800: #2d3e32;
+  --color-sage-900: #1a1c1a;
+  --color-sage-950: #111311;
 }
 
-body::before {
-  content: "";
-  position: fixed;
-  inset: 0;
-  z-index: -1;
-  opacity: 0.05;
-  background: url("./assets/logo.svg");
-  background-size: 256px;
-  transform: rotate(-12deg) scale(1.35);
-  animation: slide 30s linear infinite;
-  pointer-events: none;
-}
-
-@keyframes slide {
-  from {
-    background-position: 0 0;
-  }
-  to {
-    background-position: 256px 224px;
-  }
-}
-
-@keyframes spin {
-  from {
-    transform: rotate(0);
-  }
-  to {
-    transform: rotate(360deg);
-  }
-}
-
-@media (prefers-reduced-motion) {
-  *,
-  ::before,
-  ::after {
-    animation: none !important;
-  }
+body {
+  background-color: #F8F9F8;
+  color: #1A1C1A;
 }
