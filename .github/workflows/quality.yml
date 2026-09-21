@@ -25,3 +25,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: docker build -t arborcursus-frontend-ci .
+      - name: Start frontend container
+        run: docker run -d --name arborcursus-frontend-ci -e PORT=8081 -e BUN_PUBLIC_API_BASE_URL=http://localhost:8000 -p 8081:8081 arborcursus-frontend-ci
+      - name: Smoke test frontend
+        run: |
+          curl --fail --retry 15 --retry-delay 1 http://localhost:8081/
+          curl --fail http://localhost:8081/runtime-config.json | grep -F '"apiBaseUrl":"http://localhost:8000"'
+          curl --fail http://localhost:8081/skills
+      - name: Cleanup frontend container
+        if: always()
+        run: docker rm -f arborcursus-frontend-ci || true

@@ -69,17 +69,14 @@ export async function request<T>(path: string, { body, token, headers, ...init }
     body: body === undefined ? undefined : JSON.stringify(body),
   });
   if (response.status === 204) return undefined as T;
+  if (response.status === 401 && token) queueMicrotask(() => unauthorizedHandler?.(token));
   const contentType = response.headers.get("content-type") ?? "";
   let payload: unknown;
   if (contentType.includes("application/json")) {
     try { payload = await response.json(); }
     catch { throw new ApiError(response.status, "The server returned an invalid response."); }
   }
-  if (!response.ok) {
-    const error = normalizeError(response.status, payload);
-    if (error.status === 401 && token) queueMicrotask(() => unauthorizedHandler?.(token));
-    throw error;
-  }
+  if (!response.ok) throw normalizeError(response.status, payload);
   return payload as T;
 }
 

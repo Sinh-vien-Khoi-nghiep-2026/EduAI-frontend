@@ -27,8 +27,7 @@ export function Dialog({ title, onClose, children, dismissible = true }: { title
   useEffect(() => {
     previousFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     dialog.current?.querySelector<HTMLElement>("input, select, textarea, button:not([disabled]), [href]")?.focus();
-    const canDismiss = () => dismissibleRef.current && !dialog.current?.querySelector('button[type="submit"][disabled], .button-danger[disabled]');
-    const closeOnEscape = (event: KeyboardEvent) => { if (event.key === "Escape" && canDismiss()) onCloseRef.current(); };
+    const closeOnEscape = (event: KeyboardEvent) => { if (event.key === "Escape" && dismissibleRef.current) onCloseRef.current(); };
     window.addEventListener("keydown", closeOnEscape);
     return () => {
       window.removeEventListener("keydown", closeOnEscape);
@@ -44,6 +43,5 @@ export function Dialog({ title, onClose, children, dismissible = true }: { title
     if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
     if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
   }
-  const canDismiss = () => dismissible && !dialog.current?.querySelector('button[type="submit"][disabled], .button-danger[disabled]');
-  return <div className="modal-backdrop" onMouseDown={event => { if (canDismiss() && event.target === event.currentTarget) onClose(); }}><div className="modal" role="dialog" aria-modal="true" aria-label={title} tabIndex={-1} ref={dialog} onKeyDown={trapFocus}>{children}</div></div>;
+  return <div className="modal-backdrop" onMouseDown={event => { if (dismissible && event.target === event.currentTarget) onClose(); }}><div className="modal" role="dialog" aria-modal="true" aria-label={title} tabIndex={-1} ref={dialog} onKeyDown={trapFocus}>{children}</div></div>;
 }
