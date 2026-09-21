@@ -54,6 +54,10 @@ function normalizeError(status: number, payload: unknown): ApiError {
   return new ApiError(status, status === 401 ? "Your session is no longer valid." : "The request could not be completed.");
 }
 
+export function shouldRetryQuery(failureCount: number, error: unknown) {
+  return !(error instanceof ApiError && error.status === 401) && failureCount < 1;
+}
+
 export async function request<T>(path: string, { body, token, headers, ...init }: RequestOptions = {}): Promise<T> {
   const response = await fetch(apiUrl(path), {
     ...init,
@@ -66,7 +70,11 @@ export async function request<T>(path: string, { body, token, headers, ...init }
   });
   if (response.status === 204) return undefined as T;
   const contentType = response.headers.get("content-type") ?? "";
-  const payload: unknown = contentType.includes("application/json") ? await response.json() : undefined;
+  let payload: unknown;
+  if (contentType.includes("application/json")) {
+    try { payload = await response.json(); }
+    catch { throw new ApiError(response.status, "The server returned an invalid response."); }
+  }
   if (!response.ok) {
     const error = normalizeError(response.status, payload);
     if (error.status === 401 && token) queueMicrotask(() => unauthorizedHandler?.(token));

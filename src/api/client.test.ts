@@ -1,5 +1,5 @@
 import { afterEach, expect, test } from "bun:test";
-import { request, setUnauthorizedHandler } from "./client";
+import { ApiError, request, setUnauthorizedHandler, shouldRetryQuery } from "./client";
 
 const originalFetch = globalThis.fetch;
 function mockFetch(respond: () => Promise<Response>): typeof fetch {
@@ -36,4 +36,16 @@ test("403, server, and transport failures retain the session", async () => {
   globalThis.fetch = mockFetch(async () => { throw new TypeError("network unavailable"); });
   await expect(request("/users/me", { token: "active-token" })).rejects.toThrow("network unavailable");
   expect(notified).toEqual([]);
+});
+
+test("query retries transient failures but not bearer 401 responses", () => {
+  expect(shouldRetryQuery(0, new ApiError(401, "expired"))).toBeFalse();
+  expect(shouldRetryQuery(0, new ApiError(403, "denied"))).toBeTrue();
+  expect(shouldRetryQuery(0, new ApiError(500, "failed"))).toBeTrue();
+  expect(shouldRetryQuery(1, new TypeError("network unavailable"))).toBeFalse();
+});
+
+test("request rejects malformed JSON without leaking a parser error", async () => {
+  globalThis.fetch = mockFetch(async () => new Response("not json", { status: 500, headers: { "content-type": "application/json" } }));
+  await expect(request("/users/me")).rejects.toMatchObject({ status: 500, message: "The server returned an invalid response." });
 });

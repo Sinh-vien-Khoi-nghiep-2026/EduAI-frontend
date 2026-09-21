@@ -17,16 +17,23 @@ export function EmptyBlock({ title, description, action }: { title: string; desc
 export function Field({ label, children, error, hint }: { label: string; children: ReactNode; error?: string; hint?: string }) { return <label className="field"><span>{label}</span>{children}{hint && <small>{hint}</small>}{error && <small className="field-error">{error}</small>}</label>; }
 export function formatError(error: unknown) { return error instanceof Error ? error.message : "The request could not be completed."; }
 export function fieldError(error: unknown, field: string) { return error instanceof ApiError ? error.fieldErrors[field] : undefined; }
-export function Dialog({ title, onClose, children }: { title: string; onClose(): void; children: ReactNode }) {
+export function Dialog({ title, onClose, children, dismissible = true }: { title: string; onClose(): void; children: ReactNode; dismissible?: boolean }) {
   const dialog = useRef<HTMLDivElement>(null);
+  const previousFocus = useRef<HTMLElement | null>(null);
   const onCloseRef = useRef<() => void>(() => {});
+  const dismissibleRef = useRef(dismissible);
   useEffect(() => { onCloseRef.current = onClose; }, [onClose]);
+  useEffect(() => { dismissibleRef.current = dismissible; }, [dismissible]);
   useEffect(() => {
-    const element = dialog.current;
-    element?.querySelector<HTMLElement>("input, select, textarea, button, [href]")?.focus();
-    const closeOnEscape = (event: KeyboardEvent) => { if (event.key === "Escape") onCloseRef.current(); };
+    previousFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    dialog.current?.querySelector<HTMLElement>("input, select, textarea, button:not([disabled]), [href]")?.focus();
+    const canDismiss = () => dismissibleRef.current && !dialog.current?.querySelector('button[type="submit"][disabled], .button-danger[disabled]');
+    const closeOnEscape = (event: KeyboardEvent) => { if (event.key === "Escape" && canDismiss()) onCloseRef.current(); };
     window.addEventListener("keydown", closeOnEscape);
-    return () => window.removeEventListener("keydown", closeOnEscape);
+    return () => {
+      window.removeEventListener("keydown", closeOnEscape);
+      if (previousFocus.current?.isConnected && !previousFocus.current.hasAttribute("disabled")) previousFocus.current.focus();
+    };
   }, []);
   function trapFocus(event: ReactKeyboardEvent<HTMLDivElement>) {
     if (event.key !== "Tab") return;
@@ -37,5 +44,6 @@ export function Dialog({ title, onClose, children }: { title: string; onClose():
     if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
     if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
   }
-  return <div className="modal-backdrop" onMouseDown={event => { if (event.target === event.currentTarget) onClose(); }}><div className="modal" role="dialog" aria-modal="true" aria-label={title} tabIndex={-1} ref={dialog} onKeyDown={trapFocus}>{children}</div></div>;
+  const canDismiss = () => dismissible && !dialog.current?.querySelector('button[type="submit"][disabled], .button-danger[disabled]');
+  return <div className="modal-backdrop" onMouseDown={event => { if (canDismiss() && event.target === event.currentTarget) onClose(); }}><div className="modal" role="dialog" aria-modal="true" aria-label={title} tabIndex={-1} ref={dialog} onKeyDown={trapFocus}>{children}</div></div>;
 }

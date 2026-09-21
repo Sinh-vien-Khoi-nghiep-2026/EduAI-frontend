@@ -1,7 +1,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import "./index.css";
-import { apiOrigin } from "@/api/client";
+import { apiOrigin, shouldRetryQuery } from "@/api/client";
 import { SessionProvider } from "@/auth/session";
 import { ProtectedRoute } from "@/auth/ProtectedRoute";
 import { AppLayout, RecruiterAccess } from "@/layout/AppLayout";
@@ -18,7 +18,7 @@ import Portfolio from "@/pages/Portfolio";
 import Records from "@/pages/Records";
 import Skills from "@/pages/Skills";
 
-const client = new QueryClient({ defaultOptions: { queries: { retry: (count, error) => !(error instanceof Error && /session|401/.test(error.message)) && count < 1, refetchOnWindowFocus: false } } });
+const client = new QueryClient({ defaultOptions: { queries: { retry: shouldRetryQuery, refetchOnWindowFocus: false } } });
 
 export function App() {
   if (!apiOrigin()) return <ConfigurationError/>;
