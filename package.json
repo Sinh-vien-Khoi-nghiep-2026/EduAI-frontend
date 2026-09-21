@@ -11,8 +11,9 @@
     "dev": "bun --hot src/index.ts",
     "start": "NODE_ENV=production bun src/index.ts",
     "build": "bun run build.ts",
-    "test": "BUN_PUBLIC_API_BASE_URL=http://localhost:8000 bun test",
-    "typecheck": "bunx tsc --noEmit"
+    "test": "bun test",
+    "typecheck": "bunx tsc --noEmit",
+    "lint": "eslint \"src/**/*.{ts,tsx}\" --max-warnings=0"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.101.4",
@@ -26,9 +27,13 @@
     "tailwindcss": "^4.1.11"
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
     "@types/bun": "latest",
     "@types/react": "^19",
     "@types/react-dom": "^19",
-    "typescript": "^7.0.2"
+    "eslint": "^10.11.0",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "typescript": "5.9.3",
+    "typescript-eslint": "^8.70.0"
   }
 }

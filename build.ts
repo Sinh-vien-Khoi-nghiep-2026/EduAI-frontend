@@ -1,6 +1,7 @@
 import tailwind from "bun-plugin-tailwind";
-import { rm } from "node:fs/promises";
+import { rm, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { runtimeConfig } from "./src/runtime-config";
 
 const outdir = path.join(process.cwd(), "dist");
 await rm(outdir, { recursive: true, force: true });
@@ -16,6 +17,7 @@ const result = await Bun.build({
   define: { "process.env.NODE_ENV": JSON.stringify("production") },
 });
 if (!result.success) process.exit(1);
+await writeFile(path.join(outdir, "runtime-config.json"), JSON.stringify(runtimeConfig()));
 
 for (const output of result.outputs) {
   if (output.path.endsWith(".js") && (await Bun.file(output.path).text()).includes("process.env.")) {

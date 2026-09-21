@@ -21,7 +21,7 @@ import Skills from "@/pages/Skills";
 const client = new QueryClient({ defaultOptions: { queries: { retry: (count, error) => !(error instanceof Error && /session|401/.test(error.message)) && count < 1, refetchOnWindowFocus: false } } });
 
 export function App() {
-  if (!apiOrigin) return <ConfigurationError/>;
+  if (!apiOrigin()) return <ConfigurationError/>;
   return <QueryClientProvider client={client}><SessionProvider><BrowserRouter><Routes><Route path="/connect" element={<Connect/>}/><Route element={<ProtectedRoute/>}><Route element={<AppLayout/>}><Route path="/" element={<Dashboard/>}/><Route path="/skills" element={<Skills/>}/><Route path="/portfolio" element={<Portfolio/>}/><Route path="/records" element={<Records/>}/><Route path="/organizations" element={<Organizations/>}/><Route path="/integrations" element={<Integrations/>}/><Route path="/notifications" element={<Notifications/>}/><Route path="/evidence" element={<Evidence/>}/><Route path="/candidates" element={<RecruiterAccess><Candidates/></RecruiterAccess>}/></Route></Route><Route path="/404" element={<NotFound/>}/><Route path="*" element={<Navigate to="/404" replace/>}/></Routes></BrowserRouter></SessionProvider></QueryClientProvider>;
 }
 

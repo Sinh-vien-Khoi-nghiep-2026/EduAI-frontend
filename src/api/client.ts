@@ -16,11 +16,15 @@ export class ApiConfigurationError extends Error {}
 type RequestOptions = Omit<RequestInit, "body"> & { body?: unknown; token?: string | null };
 type UnauthorizedHandler = (token: string) => void;
 let unauthorizedHandler: UnauthorizedHandler | undefined;
-const configuredBaseUrl = (typeof process === "undefined" ? "" : process.env.BUN_PUBLIC_API_BASE_URL)?.trim().replace(/\/$/, "") ?? "";
+let configuredBaseUrl = globalThis.__ARBORCURSUS_CONFIG__?.apiBaseUrl?.trim().replace(/\/$/, "") ?? "";
 
 export function setUnauthorizedHandler(handler: UnauthorizedHandler) {
   unauthorizedHandler = handler;
   return () => { if (unauthorizedHandler === handler) unauthorizedHandler = undefined; };
+}
+
+export function configureApiOrigin(value: string | undefined) {
+  configuredBaseUrl = value?.trim().replace(/\/$/, "") ?? "";
 }
 
 function apiUrl(path: string) {
@@ -71,4 +75,4 @@ export async function request<T>(path: string, { body, token, headers, ...init }
   return payload as T;
 }
 
-export const apiOrigin = configuredBaseUrl;
+export function apiOrigin() { return configuredBaseUrl; }

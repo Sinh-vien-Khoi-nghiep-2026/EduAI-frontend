@@ -1,9 +1,10 @@
-import { type ButtonHTMLAttributes, type ReactNode } from "react";
+import { type ButtonHTMLAttributes, type KeyboardEvent as ReactKeyboardEvent, type ReactNode, useEffect, useRef } from "react";
 import { AlertTriangle, Inbox, LoaderCircle } from "lucide-react";
+import { ApiError } from "@/api/client";
 import { cn } from "@/lib/utils";
 
-export function Button({ className, variant = "primary", ...props }: ButtonHTMLAttributes<HTMLButtonElement> & { variant?: "primary" | "secondary" | "danger" | "quiet" }) {
-  return <button className={cn("button", `button-${variant}`, className)} {...props} />;
+export function Button({ className, variant = "primary", type = "button", ...props }: ButtonHTMLAttributes<HTMLButtonElement> & { variant?: "primary" | "secondary" | "danger" | "quiet" }) {
+  return <button className={cn("button", `button-${variant}`, className)} type={type} {...props} />;
 }
 export function PageHeader({ eyebrow, title, description, action }: { eyebrow?: string; title: string; description: string; action?: ReactNode }) {
   return <div className="page-header"><div><p className="eyebrow">{eyebrow}</p><h1>{title}</h1><p className="page-description">{description}</p></div>{action && <div className="page-action">{action}</div>}</div>;
@@ -15,3 +16,26 @@ export function ErrorBlock({ message, retry }: { message: string; retry?: () => 
 export function EmptyBlock({ title, description, action }: { title: string; description: string; action?: ReactNode }) { return <div className="state state-empty"><Inbox size={22} /><div><strong>{title}</strong><span>{description}</span>{action}</div></div>; }
 export function Field({ label, children, error, hint }: { label: string; children: ReactNode; error?: string; hint?: string }) { return <label className="field"><span>{label}</span>{children}{hint && <small>{hint}</small>}{error && <small className="field-error">{error}</small>}</label>; }
 export function formatError(error: unknown) { return error instanceof Error ? error.message : "The request could not be completed."; }
+export function fieldError(error: unknown, field: string) { return error instanceof ApiError ? error.fieldErrors[field] : undefined; }
+export function Dialog({ title, onClose, children }: { title: string; onClose(): void; children: ReactNode }) {
+  const dialog = useRef<HTMLDivElement>(null);
+  const onCloseRef = useRef<() => void>(() => {});
+  useEffect(() => { onCloseRef.current = onClose; }, [onClose]);
+  useEffect(() => {
+    const element = dialog.current;
+    element?.querySelector<HTMLElement>("input, select, textarea, button, [href]")?.focus();
+    const closeOnEscape = (event: KeyboardEvent) => { if (event.key === "Escape") onCloseRef.current(); };
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, []);
+  function trapFocus(event: ReactKeyboardEvent<HTMLDivElement>) {
+    if (event.key !== "Tab") return;
+    const controls = Array.from(dialog.current?.querySelectorAll<HTMLElement>("input, select, textarea, button:not([disabled]), [href]") ?? []).filter(element => !element.hasAttribute("disabled"));
+    if (!controls.length) return;
+    const first = controls[0]!;
+    const last = controls.at(-1)!;
+    if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+    if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+  }
+  return <div className="modal-backdrop" onMouseDown={event => { if (event.target === event.currentTarget) onClose(); }}><div className="modal" role="dialog" aria-modal="true" aria-label={title} tabIndex={-1} ref={dialog} onKeyDown={trapFocus}>{children}</div></div>;
+}

@@ -14,20 +14,23 @@ const SessionContext = createContext<Session | null>(null);
 export function SessionProvider({ children }: { children: ReactNode }) {
   const [token, setToken] = useState<string | null>(() => sessionStorage.getItem(sessionStorageKey));
   const client = useQueryClient();
-  const me = useQuery({ queryKey: ["me", token], queryFn: () => arbor.me(token!), enabled: Boolean(token), retry: false, staleTime: Infinity });
   const signOut = useCallback(() => {
     sessionStorage.removeItem(sessionStorageKey);
     client.clear();
     setToken(null);
   }, [client]);
+  const me = useQuery({
+    queryKey: ["me", token],
+    queryFn: async () => {
+      try { return await arbor.me(token!); }
+      catch (error) { if (shouldEndSession(error)) queueMicrotask(signOut); throw error; }
+    },
+    enabled: Boolean(token), retry: false, staleTime: Infinity,
+  });
 
   useEffect(() => setUnauthorizedHandler(unauthorizedToken => {
     if (unauthorizedToken === token) signOut();
   }), [signOut, token]);
-
-  useEffect(() => {
-    if (shouldEndSession(me.error)) signOut();
-  }, [me.error, signOut]);
 
   const connect = useCallback(async (candidate: string) => {
     const { token: verifiedToken, user } = await connectSession(candidate, arbor.me, (nextToken, nextUser) => {

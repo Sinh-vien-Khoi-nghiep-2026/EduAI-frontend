@@ -8,7 +8,7 @@ React 19 application for the ArborCursus FastAPI API.
 cp .env.example .env
 ```
 
-`BUN_PUBLIC_API_BASE_URL` is the API origin, without `/api/v1` and without a trailing slash. It is the only environment-variable prefix exposed to browser code. The application shows a configuration error instead of making accidental same-origin API calls when it is absent.
+`BUN_PUBLIC_API_BASE_URL` is the API origin, without `/api/v1` and without a trailing slash. Bun serves it through a non-cacheable JSON runtime configuration endpoint; static builds emit the same public value at build time. The application shows a configuration error instead of making accidental same-origin API calls when it is absent.
 
 ## Local development
 
@@ -31,17 +31,18 @@ The API defaults to `http://localhost:8000`, so the example environment file wor
 BUN_PUBLIC_API_BASE_URL=https://api.example.com docker compose up --build
 ```
 
-Compose publishes `http://localhost:8081` to the server's `PORT=8081`. The container runs Bun's source server, which compiles browser modules when served; `BUN_PUBLIC_API_BASE_URL` is therefore read from the running container environment. This differs from `bun run build`: that command emits a static bundle and inlines its public environment at build time.
+Compose publishes `http://localhost:8081` to the server's `PORT=8081`. The source server serves a non-cacheable `/runtime-config.json` from its current `BUN_PUBLIC_API_BASE_URL`, so Compose environment changes take effect on container restart. `bun run build` instead emits that configuration at build time.
 
 ## Quality checks
 
 ```sh
+bun run lint
 bun run typecheck
 bun run test
 BUN_PUBLIC_API_BASE_URL=http://localhost:8000 bun run build
 ```
 
-The test script supplies a local API origin only to exercise the transport without weakening the runtime configuration requirement. The production build verifies that generated browser JavaScript does not retain a `process.env.*` reference.
+The test preload supplies a local API origin only to exercise the transport without weakening the runtime configuration requirement. The production build verifies that generated browser JavaScript does not retain a `process.env.*` reference.
 
 The backend is bearer-token protected and ships only a native OIDC callback configuration. The connection screen therefore accepts an access token issued by an operator-configured identity-provider client. It stores the token in `sessionStorage`, never local storage.
 

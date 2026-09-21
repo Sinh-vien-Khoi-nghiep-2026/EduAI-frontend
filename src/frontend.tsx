@@ -1,21 +1,16 @@
-/**
- * This file is the entry point for the React app, it sets up the root
- * element and renders the App component to the DOM.
- *
- * It is included in `src/index.html`.
- */
-
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { App } from "./App";
+import { configureApiOrigin } from "./api/client";
+import type { RuntimeConfig } from "./runtime-config";
 
 const elem = document.getElementById("root")!;
 
-const app = (
-  <StrictMode>
-    <App />
-  </StrictMode>
-);
+try {
+  const response = await fetch("/runtime-config.json", { cache: "no-store" });
+  if (response.ok) configureApiOrigin((await response.json() as RuntimeConfig).apiBaseUrl);
+} catch {
+  // ConfigurationError renders when runtime configuration cannot be read.
+}
 
-// https://bun.com/docs/bundler/hot-reloading#import-meta-hot-data
-(import.meta.hot.data.root ??= createRoot(elem)).render(app);
+(import.meta.hot.data.root ??= createRoot(elem)).render(<StrictMode><App /></StrictMode>);
