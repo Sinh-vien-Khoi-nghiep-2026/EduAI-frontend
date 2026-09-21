@@ -1,18 +1,20 @@
-import { BrowserRouter, Route, Routes } from "react-router-dom";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import "./index.css";
-import Home from "./pages/Home";
-import { RootLayout } from "./layout/RootLayout";
-
-export function App() {
-  return (
-      <BrowserRouter>
-        <Routes >
-          <Route element={<RootLayout />}>
-            <Route path="/" element={<Home />} />
-          </Route>
-        </Routes>
-      </BrowserRouter>
-    );
-}
-
+import { SessionProvider } from "@/auth/session";
+import { ProtectedRoute } from "@/auth/ProtectedRoute";
+import { AppLayout, RecruiterAccess } from "@/layout/AppLayout";
+import Connect from "@/pages/Connect";
+import Dashboard from "@/pages/Dashboard";
+import Skills from "@/pages/Skills";
+import Portfolio from "@/pages/Portfolio";
+import Records from "@/pages/Records";
+import Organizations from "@/pages/Organizations";
+import Integrations from "@/pages/Integrations";
+import Notifications from "@/pages/Notifications";
+import Evidence from "@/pages/Evidence";
+import Candidates from "@/pages/Candidates";
+import NotFound from "@/pages/NotFound";
+const client = new QueryClient({ defaultOptions: { queries: { retry: (count, error) => !(error instanceof Error && /session|401/.test(error.message)) && count < 1, refetchOnWindowFocus: false } } });
+export function App() { return <QueryClientProvider client={client}><SessionProvider><BrowserRouter><Routes><Route path="/connect" element={<Connect/>}/><Route element={<ProtectedRoute/>}><Route element={<AppLayout/>}><Route path="/" element={<Dashboard/>}/><Route path="/skills" element={<Skills/>}/><Route path="/portfolio" element={<Portfolio/>}/><Route path="/records" element={<Records/>}/><Route path="/organizations" element={<Organizations/>}/><Route path="/integrations" element={<Integrations/>}/><Route path="/notifications" element={<Notifications/>}/><Route path="/evidence" element={<Evidence/>}/><Route path="/candidates" element={<RecruiterAccess><Candidates/></RecruiterAccess>}/></Route></Route><Route path="/404" element={<NotFound/>}/><Route path="*" element={<Navigate to="/404" replace/>}/></Routes></BrowserRouter></SessionProvider></QueryClientProvider>; }
 export default App;
