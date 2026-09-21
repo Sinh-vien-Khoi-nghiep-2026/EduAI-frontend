@@ -16,7 +16,7 @@ export class ApiConfigurationError extends Error {}
 type RequestOptions = Omit<RequestInit, "body"> & { body?: unknown; token?: string | null };
 type UnauthorizedHandler = (token: string) => void;
 let unauthorizedHandler: UnauthorizedHandler | undefined;
-const configuredBaseUrl = process.env.BUN_PUBLIC_API_BASE_URL?.trim().replace(/\/$/, "") ?? "";
+const configuredBaseUrl = (typeof process === "undefined" ? "" : process.env.BUN_PUBLIC_API_BASE_URL)?.trim().replace(/\/$/, "") ?? "";
 
 export function setUnauthorizedHandler(handler: UnauthorizedHandler) {
   unauthorizedHandler = handler;

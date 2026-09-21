@@ -1,8 +1,12 @@
 import { createContext, type ReactNode, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { arbor, type User } from "@/api/arbor";
-import { setUnauthorizedHandler } from "@/api/client";
+import { ApiError, setUnauthorizedHandler } from "@/api/client";
 import { connectSession, sessionStorageKey } from "./session-transaction";
+
+export function shouldEndSession(error: unknown) {
+  return error instanceof ApiError && error.status === 401;
+}
 
 type Session = { token: string | null; user: User | undefined; isLoading: boolean; connect(token: string): Promise<void>; signOut(): void };
 const SessionContext = createContext<Session | null>(null);
@@ -10,7 +14,7 @@ const SessionContext = createContext<Session | null>(null);
 export function SessionProvider({ children }: { children: ReactNode }) {
   const [token, setToken] = useState<string | null>(() => sessionStorage.getItem(sessionStorageKey));
   const client = useQueryClient();
-  const me = useQuery({ queryKey: ["me", token], queryFn: () => arbor.me(token!), enabled: Boolean(token), retry: false });
+  const me = useQuery({ queryKey: ["me", token], queryFn: () => arbor.me(token!), enabled: Boolean(token), retry: false, staleTime: Infinity });
   const signOut = useCallback(() => {
     sessionStorage.removeItem(sessionStorageKey);
     client.clear();
@@ -20,6 +24,10 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   useEffect(() => setUnauthorizedHandler(unauthorizedToken => {
     if (unauthorizedToken === token) signOut();
   }), [signOut, token]);
+
+  useEffect(() => {
+    if (shouldEndSession(me.error)) signOut();
+  }, [me.error, signOut]);
 
   const connect = useCallback(async (candidate: string) => {
     const { token: verifiedToken, user } = await connectSession(candidate, arbor.me, (nextToken, nextUser) => {

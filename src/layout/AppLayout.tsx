@@ -4,7 +4,7 @@ import { type ReactNode, useState } from "react";
 import { NavLink, Outlet, useLocation } from "react-router-dom";
 import { arbor } from "@/api/arbor";
 import { useSession } from "@/auth/session";
-import { Button, Status } from "@/components/app-ui";
+import { Button, ErrorBlock, LoadingBlock, Status } from "@/components/app-ui";
 
 const nav = [
   ["/", "Overview", Sparkles], ["/skills", "Skills", GraduationCap], ["/evidence", "Evidence", ShieldCheck], ["/portfolio", "Portfolio", FolderKanban], ["/records", "Academic records", GraduationCap], ["/organizations", "Organizations", Building2], ["/integrations", "Integrations", Settings2],
@@ -25,6 +25,7 @@ export function RecruiterAccess({ children }: { children: ReactNode }) {
   const { token } = useSession();
   const orgs = useQuery({ queryKey: ["organizations"], queryFn: () => arbor.organizations(token!) });
   const allowed = orgs.data?.some(item => item.approved && item.kind === "company" && (item.role === "recruiter" || item.role === "admin"));
-  if (orgs.isLoading) return null;
+  if (orgs.isLoading) return <LoadingBlock label="Checking recruiter access…"/>;
+  if (orgs.isError) return <ErrorBlock message="Recruiter access could not be checked." retry={() => void orgs.refetch()}/>;
   return allowed ? <>{children}</> : <div className="access-note"><Status tone="warning">Restricted</Status><p>Candidate search is available to approved company recruiters and organization admins.</p></div>;
 }

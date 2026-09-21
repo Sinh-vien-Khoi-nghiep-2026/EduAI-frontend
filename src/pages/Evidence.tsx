@@ -18,10 +18,12 @@ export default function Evidence() {
   const save = useMutation<EvidenceResult, Error, FormData>({ mutationFn: async data => {
     const evidence: EvidenceInput = { source: String(data.get("source")).trim(), external_id: String(data.get("externalId")).trim() || undefined, url: String(data.get("url")).trim() || undefined, title: String(data.get("title")).trim(), data: {} };
     if (mode === "create") return arbor.createEvidence(token!, evidence);
-    if (mode === "edit") return arbor.updateEvidence(token!, String(data.get("evidenceId")).trim(), evidence);
+    const evidenceId = String(data.get("evidenceId")).trim();
+    if (!evidenceId) throw new Error("Enter an evidence ID.");
+    if (mode === "edit") return arbor.updateEvidence(token!, evidenceId, evidence);
     const status = String(data.get("status"));
     if (status !== "verified" && status !== "rejected" && status !== "revoked") throw new Error("Choose a valid review decision.");
-    return arbor.reviewEvidence(token!, String(data.get("evidenceId")).trim(), { organization_id: String(data.get("organizationId")), status, note: String(data.get("note")).trim() || undefined });
+    return arbor.reviewEvidence(token!, evidenceId, { organization_id: String(data.get("organizationId")), status, note: String(data.get("note")).trim() || undefined });
   }, onSuccess: result => { void client.invalidateQueries({ queryKey: ["my-skills"] }); setNotice("revision" in result ? `Evidence saved. Keep this ID for skill links or review: ${result.id}` : `Review submitted for evidence revision ${result.evidence_revision}.`); setMode(null); } });
   function submit(event: FormEvent<HTMLFormElement>) { event.preventDefault(); setError(""); setNotice(""); save.mutate(new FormData(event.currentTarget), { onError: cause => setError(formatError(cause)) }); }
   const reviewer = organizations.data?.filter(org => org.approved && (org.role === "reviewer" || org.role === "admin")) ?? [];

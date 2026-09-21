@@ -1,4 +1,4 @@
-FROM oven/bun:1
+FROM oven/bun:1.3.14
 
 WORKDIR /app
 
@@ -8,7 +8,8 @@ RUN bun install --production --frozen-lockfile
 COPY src ./src
 
 ENV NODE_ENV=production
-EXPOSE 3000
+ENV PORT=8081
+EXPOSE 8081
 
 USER bun
 CMD ["bun", "run", "start"]
