@@ -1,39 +1,37 @@
-import { createContext, type ReactNode, useContext, useEffect, useMemo, useState } from "react";
+import { createContext, type ReactNode, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ApiError } from "@/api/client";
 import { arbor, type User } from "@/api/arbor";
+import { setUnauthorizedHandler } from "@/api/client";
+import { connectSession, sessionStorageKey } from "./session-transaction";
 
 type Session = { token: string | null; user: User | undefined; isLoading: boolean; connect(token: string): Promise<void>; signOut(): void };
 const SessionContext = createContext<Session | null>(null);
-const storageKey = "arborcursus.access-token";
 
 export function SessionProvider({ children }: { children: ReactNode }) {
-  const [token, setToken] = useState<string | null>(() => sessionStorage.getItem(storageKey));
+  const [token, setToken] = useState<string | null>(() => sessionStorage.getItem(sessionStorageKey));
   const client = useQueryClient();
   const me = useQuery({ queryKey: ["me", token], queryFn: () => arbor.me(token!), enabled: Boolean(token), retry: false });
+  const signOut = useCallback(() => {
+    sessionStorage.removeItem(sessionStorageKey);
+    client.clear();
+    setToken(null);
+  }, [client]);
 
-  useEffect(() => {
-    if (me.error instanceof ApiError && me.error.status === 401) {
-      sessionStorage.removeItem(storageKey);
-      setToken(null);
-    }
-  }, [me.error]);
+  useEffect(() => setUnauthorizedHandler(unauthorizedToken => {
+    if (unauthorizedToken === token) signOut();
+  }), [signOut, token]);
 
-  const value = useMemo<Session>(() => ({
-    token,
-    user: me.data,
-    isLoading: Boolean(token) && me.isLoading,
-    async connect(nextToken) {
-      sessionStorage.setItem(storageKey, nextToken);
-      setToken(nextToken);
-      await client.fetchQuery({ queryKey: ["me", nextToken], queryFn: () => arbor.me(nextToken) });
-    },
-    signOut() {
-      sessionStorage.removeItem(storageKey);
+  const connect = useCallback(async (candidate: string) => {
+    const { token: verifiedToken, user } = await connectSession(candidate, arbor.me, (nextToken, nextUser) => {
       client.clear();
-      setToken(null);
-    },
-  }), [client, me.data, me.isLoading, token]);
+      client.setQueryData(["me", nextToken], nextUser);
+      sessionStorage.setItem(sessionStorageKey, nextToken);
+      setToken(nextToken);
+    });
+    client.setQueryData(["me", verifiedToken], user);
+  }, [client]);
+
+  const value = useMemo<Session>(() => ({ token, user: me.data, isLoading: Boolean(token) && me.isLoading, connect, signOut }), [connect, me.data, me.isLoading, signOut, token]);
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;
 }
 

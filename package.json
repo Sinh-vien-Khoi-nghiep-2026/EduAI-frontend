@@ -11,7 +11,7 @@
     "dev": "bun --hot src/index.ts",
     "start": "NODE_ENV=production bun src/index.ts",
     "build": "bun run build.ts",
-    "test": "bun test",
+    "test": "BUN_PUBLIC_API_BASE_URL=http://localhost:8000 bun test",
     "typecheck": "bunx tsc --noEmit"
   },
   "dependencies": {
@@ -21,7 +21,6 @@
     "lucide-react": "^1.27.0",
     "react": "^19",
     "react-dom": "^19",
-    "react-router": "^8.3.0",
     "react-router-dom": "^7.18.2",
     "tailwind-merge": "^3.6.0",
     "tailwindcss": "^4.1.11"

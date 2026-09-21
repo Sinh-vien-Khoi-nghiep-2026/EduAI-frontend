@@ -2,7 +2,7 @@
 
 ## Existing prototype
 
-The repository is a Bun-served React 19 + TypeScript + Tailwind 4 application. It already includes React Router, TanStack Query, Axios, Lucide, Base UI/shadcn-compatible primitives, and a strict `tsconfig`.
+The repository is a Bun-served React 19 + TypeScript + Tailwind 4 application. It includes React Router, TanStack Query, Lucide, utility CSS dependencies, and a strict `tsconfig`.
 
 The executable product was one `/` route. It rendered a prototype sidebar/header and hard-coded course content (`Quantum Mechanics III`) unrelated to ArborCursus. The server exposed demo `/api/hello` routes. There was no API client, session model, authentication, backend DTO typing, data-fetching, forms, error normalization, protected routing, useful navigation, test script, or frontend environment example. The dark root, animated logo wallpaper, and generic template copy were visually and semantically incompatible with a calm production application.
 

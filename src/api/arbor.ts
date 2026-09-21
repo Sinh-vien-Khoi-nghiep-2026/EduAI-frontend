@@ -12,6 +12,7 @@ export type Notification = { id: string; kind: string; body: Record<string, unkn
 export type Integration = { provider: string; status: string; capabilities: Record<string, boolean>; unsupported?: string[]; last_sync_at: string | null; error?: string | null };
 export type CandidateResult = { items: { id: string; display_name: string | null }[]; page: number; page_size: number };
 export type AuthConfig = { issuer: string; discovery_url: string; client_id: string; audience: string; scopes: string[]; pkce: "S256"; grant_type: "authorization_code"; redirect_uri: string };
+export type EvidenceInput = { source: string; external_id?: string; url?: string; title: string; data: Record<string, never> };
 export type EvidenceCreated = { id: string; revision: number; status: string };
 export type EvidenceReview = { id: string; status: string; evidence_revision: number };
 
@@ -34,10 +35,11 @@ export const arbor = {
   updateAchievement: (token: string, id: string, body: { title: string; kind: string; url?: string; data: Record<string, never> }) => request<Pick<Achievement, "id" | "status" | "revision">>(`/achievements/me/${id}`, { ...auth(token), method: "PATCH", body }),
   projects: (token: string) => request<Project[]>("/projects/me", auth(token)),
   createProject: (token: string, body: { name: string; url?: string; visibility?: string; data: Record<string, never> }) => request<Pick<Project, "id" | "name" | "visibility">>("/projects/me", { ...auth(token), method: "POST", body }),
-  createEvidence: (token: string, body: { source: string; external_id?: string; url?: string; title: string; data: Record<string, never> }) => request<EvidenceCreated>("/evidence/me", { ...auth(token), method: "POST", body }),
-  reviewEvidence: (token: string, id: string, body: { organization_id: string; status: "verified" | "rejected" | "revoked"; note?: string }) => request<EvidenceReview>(`/evidence/${id}/review`, { ...auth(token), method: "POST", body }),
+  createEvidence: (token: string, body: EvidenceInput) => request<EvidenceCreated>("/evidence/me", { ...auth(token), method: "POST", body }),
+  updateEvidence: (token: string, id: string, body: EvidenceInput) => request<EvidenceCreated>(`/evidence/${encodeURIComponent(id)}`, { ...auth(token), method: "PATCH", body }),
+  reviewEvidence: (token: string, id: string, body: { organization_id: string; status: "verified" | "rejected" | "revoked"; note?: string }) => request<EvidenceReview>(`/evidence/${encodeURIComponent(id)}/review`, { ...auth(token), method: "POST", body }),
   notifications: (token: string) => request<Notification[]>("/notifications", auth(token)),
-  markNotificationRead: (token: string, id: string) => request<{ read: true }>(`/notifications/${id}/read`, { ...auth(token), method: "POST" }),
+  markNotificationRead: (token: string, id: string) => request<{ read: true }>(`/notifications/${encodeURIComponent(id)}/read`, { ...auth(token), method: "POST" }),
   integrations: (token: string) => request<Integration[]>("/integrations", auth(token)),
-  candidateSearch: (token: string, body: { organization_id: string; match: "all" | "any"; skills: { skill_id: string; min_level: number }[]; verified_only: boolean; require_shared_project: boolean; page: number; page_size: number }) => request<CandidateResult>("/candidates/search", { ...auth(token), method: "POST", body }),
+  candidateSearch: (token: string, body: { organization_id: string; match: "all" | "any"; skills: { skill_id: string; min_level: number }[]; verified_only: boolean; school_id?: string; require_shared_project: boolean; page: number; page_size: number }) => request<CandidateResult>("/candidates/search", { ...auth(token), method: "POST", body }),
 };

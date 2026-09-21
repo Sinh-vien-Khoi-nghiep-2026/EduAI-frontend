@@ -11,26 +11,39 @@ export class ApiError extends Error {
   }
 }
 
-type RequestOptions = Omit<RequestInit, "body"> & { body?: unknown; token?: string | null };
+export class ApiConfigurationError extends Error {}
 
-const baseUrl = (process.env.BUN_PUBLIC_API_BASE_URL ?? "").replace(/\/$/, "");
+type RequestOptions = Omit<RequestInit, "body"> & { body?: unknown; token?: string | null };
+type UnauthorizedHandler = (token: string) => void;
+let unauthorizedHandler: UnauthorizedHandler | undefined;
+const configuredBaseUrl = process.env.BUN_PUBLIC_API_BASE_URL?.trim().replace(/\/$/, "") ?? "";
+
+export function setUnauthorizedHandler(handler: UnauthorizedHandler) {
+  unauthorizedHandler = handler;
+  return () => { if (unauthorizedHandler === handler) unauthorizedHandler = undefined; };
+}
+
+function apiUrl(path: string) {
+  if (!configuredBaseUrl) throw new ApiConfigurationError("API configuration is missing. Set BUN_PUBLIC_API_BASE_URL before starting or building the frontend.");
+  return `${configuredBaseUrl}/api/v1${path}`;
+}
+
 function normalizeError(status: number, payload: unknown): ApiError {
-  const detail = typeof payload === "object" && payload !== null ? (payload as { detail?: unknown }).detail : undefined;
+  const detail = typeof payload === "object" && payload !== null && "detail" in payload ? payload.detail : undefined;
   if (Array.isArray(detail)) {
     const fieldErrors: FieldErrors = {};
     for (const issue of detail) {
-      if (typeof issue === "object" && issue !== null) {
-        const item = issue as { loc?: unknown; msg?: unknown };
-        const key = Array.isArray(item.loc) ? String(item.loc.at(-1) ?? "form") : "form";
-        fieldErrors[key] = typeof item.msg === "string" ? item.msg : "Invalid value";
-      }
+      if (typeof issue !== "object" || issue === null) continue;
+      const loc = "loc" in issue ? issue.loc : undefined;
+      const message = "msg" in issue ? issue.msg : undefined;
+      const key = Array.isArray(loc) ? String(loc.at(-1) ?? "form") : "form";
+      fieldErrors[key] = typeof message === "string" ? message : "Invalid value";
     }
     return new ApiError(status, "Please correct the highlighted fields.", "validation_error", fieldErrors);
   }
   if (typeof detail === "object" && detail !== null) {
-    const record = detail as { code?: unknown; message?: unknown };
-    const code = typeof record.code === "string" ? record.code : undefined;
-    const message = typeof record.message === "string" ? record.message : code?.replaceAll("_", " ") ?? "Request failed";
+    const code = "code" in detail && typeof detail.code === "string" ? detail.code : undefined;
+    const message = "message" in detail && typeof detail.message === "string" ? detail.message : code?.replaceAll("_", " ") ?? "Request failed";
     return new ApiError(status, message, code);
   }
   if (typeof detail === "string") return new ApiError(status, detail);
@@ -38,7 +51,7 @@ function normalizeError(status: number, payload: unknown): ApiError {
 }
 
 export async function request<T>(path: string, { body, token, headers, ...init }: RequestOptions = {}): Promise<T> {
-  const response = await fetch(`${baseUrl}/api/v1${path}`, {
+  const response = await fetch(apiUrl(path), {
     ...init,
     headers: {
       ...(body === undefined ? {} : { "Content-Type": "application/json" }),
@@ -50,8 +63,12 @@ export async function request<T>(path: string, { body, token, headers, ...init }
   if (response.status === 204) return undefined as T;
   const contentType = response.headers.get("content-type") ?? "";
   const payload: unknown = contentType.includes("application/json") ? await response.json() : undefined;
-  if (!response.ok) throw normalizeError(response.status, payload);
+  if (!response.ok) {
+    const error = normalizeError(response.status, payload);
+    if (error.status === 401 && token) queueMicrotask(() => unauthorizedHandler?.(token));
+    throw error;
+  }
   return payload as T;
 }
 
-export const apiOrigin = baseUrl;
+export const apiOrigin = configuredBaseUrl;

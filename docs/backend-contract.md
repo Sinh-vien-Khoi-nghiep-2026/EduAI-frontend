@@ -18,6 +18,8 @@ The API is an OIDC resource server, not an identity provider. Every endpoint bel
 
 CORS allows configured origins (`http://localhost:8081` by default) and credentials, but authorization is bearer-token based. The frontend must use a configurable API origin (`BUN_PUBLIC_API_BASE_URL` in this app) and must not hardcode an API host.
 
+The frontend serves locally at `http://localhost:8081` to match the backend default. Browser builds inline only `BUN_PUBLIC_*` environment variables; an absent `BUN_PUBLIC_API_BASE_URL` shows a configuration error rather than falling back to the frontend origin.
+
 Errors are FastAPI HTTP errors: most policy/domain errors use `{"detail":{"code":"..."}}`; request validation uses `{"detail":[{...}]}`. Clients must also handle empty 204 responses.
 
 ## Endpoint inventory
