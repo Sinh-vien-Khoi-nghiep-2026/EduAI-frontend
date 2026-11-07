@@ -3,7 +3,7 @@ import type { ReactNode } from "react";
 import { Navigate, useLocation } from "react-router-dom";
 import { arbor } from "@/api/arbor";
 import { useSession } from "@/auth/session";
-import { capabilitiesFor, decodeClaims } from "@/auth/permissions";
+import { type Capability, capabilitiesFor, decodeClaims } from "@/auth/permissions";
 import { ErrorBlock, LoadingBlock, Status } from "@/components/app-ui";
 
 /**
@@ -41,6 +41,41 @@ export function AdminGuard({ children }: { children: ReactNode }) {
         <p>
           This console is available to platform administrators and to reviewers or admins of an
           approved organization. Your account has neither role, so no administrative data is shown.
+        </p>
+      </div>
+    );
+  }
+  return <>{children}</>;
+}
+
+/**
+ * Per-section gate. `AdminGuard` only answers "may this account use the
+ * console at all"; without this, a reviewer could open /admin/users, render
+ * the page shell, and read the resulting 403 as a load error. The backend still
+ * refuses the data, but the UI must not offer the route.
+ */
+export function RequireCapability({
+  capability,
+  children,
+}: {
+  capability: Capability;
+  children: ReactNode;
+}) {
+  const { token } = useSession();
+  const organizations = useQuery({
+    queryKey: ["organizations"],
+    queryFn: () => arbor.organizations(token!),
+    enabled: Boolean(token),
+  });
+  if (organizations.isLoading) return <LoadingBlock label="Checking access…" />;
+  const capabilities = capabilitiesFor(decodeClaims(token), organizations.data);
+  if (!capabilities.has(capability)) {
+    return (
+      <div className="access-note">
+        <Status tone="warning">Restricted</Status>
+        <p>
+          This section needs a capability your account does not have. A platform administrator can
+          grant it; organization roles alone never do.
         </p>
       </div>
     );

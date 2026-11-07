@@ -19,6 +19,26 @@ export type EvidenceReview = { id: string; status: string; evidence_revision: nu
 export type SkillCreateInput = { stable_id: string; name: string; path?: string; parent_id?: string | null };
 export type SkillCreated = { id: string; stable_id: string; name: string };
 
+export type AdminPage<T> = { items: T[]; page: number; page_size: number; total: number };
+export type AdminUser = { id: string; display_name: string | null; email: string | null; profile_public: boolean; recruiter_searchable: boolean; created_at: string; roles: string[] };
+export type AdminUserDetail = { id: string; display_name: string | null; email: string | null; profile_public: boolean; recruiter_searchable: boolean; created_at: string; memberships: { organization_id: string; organization_name: string; kind: string; approved: boolean; role: AdminMemberRole }[] };
+export type AdminOrganization = { id: string; name: string; kind: string; approved: boolean; created_at: string; member_count: number };
+export type AdminOrganizationDetail = { id: string; name: string; kind: string; approved: boolean; created_at: string; members: { user_id: string; display_name: string | null; email: string | null; role: AdminMemberRole }[] };
+export type AdminEvidence = { id: string; owner_id: string; source: string; title: string; url: string | null; status: string; revision: number; verified_organization_id: string | null };
+export type AdminAnalytics = { users: number; organizations: { total: number; approved: number; pending: number }; memberships: number; evidence: { total: number; by_status: Record<string, number> }; /** Historical verified review actions; current verified evidence is evidence.by_status.verified. */ reviews: { total: number; verified: number } };
+export type AdminRole = "member" | "recruiter" | "reviewer" | "admin";
+/** Legacy membership rows may still hold `platform_admin`; it grants nothing. */
+export type AdminMemberRole = AdminRole | "platform_admin";
+
+function query(params: Record<string, string | number | boolean | undefined>) {
+  const search = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) {
+    if (value !== undefined && value !== "") search.set(key, String(value));
+  }
+  const suffix = search.toString();
+  return suffix ? `?${suffix}` : "";
+}
+
 const auth = (token: string) => ({ token });
 export const arbor = {
   authConfig: () => request<AuthConfig>("/auth/config"),
@@ -42,6 +62,17 @@ export const arbor = {
   createEvidence: (token: string, body: EvidenceInput) => request<EvidenceCreated>("/evidence/me", { ...auth(token), method: "POST", body }),
   updateEvidence: (token: string, id: string, body: EvidenceInput) => request<EvidenceCreated>(`/evidence/${encodeURIComponent(id)}`, { ...auth(token), method: "PATCH", body }),
   reviewEvidence: (token: string, id: string, body: { organization_id: string; status: "verified" | "rejected" | "revoked"; note?: string }) => request<EvidenceReview>(`/evidence/${encodeURIComponent(id)}/review`, { ...auth(token), method: "POST", body }),
+  analytics: (token: string) => request<AdminAnalytics>("/admin/analytics", auth(token)),
+  adminUsers: (token: string, params: { q?: string; page?: number; page_size?: number } = {}) => request<AdminPage<AdminUser>>(`/admin/users${query(params)}`, auth(token)),
+  adminUser: (token: string, id: string) => request<AdminUserDetail>(`/admin/users/${encodeURIComponent(id)}`, auth(token)),
+  updateAdminUser: (token: string, id: string, body: { display_name?: string | null; profile_public?: boolean; recruiter_searchable?: boolean }) => request<{ id: string; display_name: string | null; email: string | null; profile_public: boolean; recruiter_searchable: boolean }>(`/admin/users/${encodeURIComponent(id)}`, { ...auth(token), method: "PATCH", body }),
+  adminOrganizations: (token: string, params: { approved?: boolean; kind?: string; page?: number; page_size?: number } = {}) => request<AdminPage<AdminOrganization>>(`/admin/organizations${query(params)}`, auth(token)),
+  adminOrganization: (token: string, id: string) => request<AdminOrganizationDetail>(`/admin/organizations/${encodeURIComponent(id)}`, auth(token)),
+  approveOrganization: (token: string, id: string, approved: boolean) => request<{ id: string; approved: boolean }>(`/admin/organizations/${encodeURIComponent(id)}`, { ...auth(token), method: "PATCH", body: { approved } }),
+  addMember: (token: string, orgId: string, body: { user_id: string; role: AdminRole }) => request<{ organization_id: string; user_id: string; role: string }>(`/admin/organizations/${encodeURIComponent(orgId)}/members`, { ...auth(token), method: "POST", body }),
+  updateMember: (token: string, orgId: string, userId: string, role: AdminRole) => request<{ organization_id: string; user_id: string; role: string }>(`/admin/organizations/${encodeURIComponent(orgId)}/members/${encodeURIComponent(userId)}`, { ...auth(token), method: "PATCH", body: { role } }),
+  removeMember: (token: string, orgId: string, userId: string) => request<void>(`/admin/organizations/${encodeURIComponent(orgId)}/members/${encodeURIComponent(userId)}`, { ...auth(token), method: "DELETE" }),
+  adminEvidence: (token: string, params: { status?: string; organization_id?: string; page?: number; page_size?: number } = {}) => request<AdminPage<AdminEvidence>>(`/admin/evidence${query(params)}`, auth(token)),
   notifications: (token: string) => request<Notification[]>("/notifications", auth(token)),
   markNotificationRead: (token: string, id: string) => request<{ read: true }>(`/notifications/${encodeURIComponent(id)}/read`, { ...auth(token), method: "POST" }),
   integrations: (token: string) => request<Integration[]>("/integrations", auth(token)),

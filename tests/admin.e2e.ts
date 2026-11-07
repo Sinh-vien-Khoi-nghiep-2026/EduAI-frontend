@@ -197,6 +197,26 @@ test("reviewer records a real decision and sees the server receipt", async ({ pa
   expect.soft(evidenceResponse.ok()).toBe(true);
   const evidence = (await evidenceResponse.json()) as { id: string; revision: number };
 
+  // A sibling test deliberately puts every organization back in the pending
+  // state; re-approve the reviewer's organization so this test owns its own
+  // precondition instead of depending on run order.
+  const adminTokenResponse = await request.post(
+    "http://127.0.0.1:8099/realms/arborcursus/protocol/openid-connect/token",
+    { form: { grant_type: "password", client_id: "arborcursus-web", username: ADMIN.user, password: ADMIN.password } },
+  );
+  const adminToken = (await adminTokenResponse.json() as { access_token: string }).access_token;
+  const pending = await request.get(
+    "http://127.0.0.1:8000/api/v1/admin/organizations?page_size=100",
+    { headers: { Authorization: `Bearer ${adminToken}` } },
+  );
+  const orgList = await pending.json() as { items: { id: string; name: string }[] };
+  const reviewOrg = orgList.items.find(org => org.name === "Hanoi Polytechnic");
+  expect.soft(reviewOrg).toBeDefined();
+  await request.patch(`http://127.0.0.1:8000/api/v1/admin/organizations/${reviewOrg!.id}`, {
+    headers: { Authorization: `Bearer ${adminToken}` },
+    data: { approved: true },
+  });
+
   await page.setViewportSize({ width: 1280, height: 800 });
   await signIn(page, REVIEWER);
   await page.goto("/admin/reviews");
@@ -241,4 +261,142 @@ test("keyboard: dialog traps focus, Escape closes, form is reachable by tab", as
   await expect(dialog).toBeHidden();
   // Focus returns to the control that opened the dialog.
   await expect(trigger).toBeFocused();
+});
+
+test("platform admin administers accounts, organizations and evidence", async ({ page, request }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+
+  // Make the approval assertion independent of whatever a previous run left
+  // behind: put every organization back in the pending state through the API.
+  const tokenResponse = await request.post(
+    "http://127.0.0.1:8099/realms/arborcursus/protocol/openid-connect/token",
+    { form: { grant_type: "password", client_id: "arborcursus-web", username: ADMIN.user, password: ADMIN.password } },
+  );
+  const adminToken = (await tokenResponse.json() as { access_token: string }).access_token;
+  const listed = await request.get("http://127.0.0.1:8000/api/v1/admin/organizations?page_size=100", {
+    headers: { Authorization: `Bearer ${adminToken}` },
+  });
+  const organizations = await listed.json() as { items: { id: string; name: string; approved: boolean }[] };
+  for (const org of organizations.items.filter(item => item.approved)) {
+    await request.patch(`http://127.0.0.1:8000/api/v1/admin/organizations/${org.id}`, {
+      headers: { Authorization: `Bearer ${adminToken}` },
+      data: { approved: false },
+    });
+  }
+
+  await signIn(page, ADMIN);
+
+  // Accounts: real rows from GET /admin/users, search narrows them.
+  await page.goto("/admin/users");
+  await expect(page.getByRole("heading", { name: "Accounts" })).toBeVisible();
+  await expect(page.getByRole("cell", { name: /reviewer@local\.dev/ })).toBeVisible();
+  await page.getByRole("searchbox", { name: "Search accounts" }).fill("student");
+  await expect(page.getByRole("cell", { name: /student@local\.dev/ })).toBeVisible();
+  await expect(page.getByRole("cell", { name: /reviewer@local\.dev/ })).toHaveCount(0);
+  await page.screenshot({ path: `${SHOTS}/users-1440.png`, fullPage: true });
+
+  // Organizations: approving a pending organization persists.
+  await page.goto("/admin/organizations");
+  const pendingRow = page.getByRole("row", { name: /Acme School/ });
+  await expect(pendingRow).toBeVisible();
+  await pendingRow.getByRole("button", { name: "Approve" }).click();
+  // Approval is persisted, so the row leaves the Pending tab.
+  await expect(page.getByRole("row", { name: /Acme School/ })).toHaveCount(0);
+  await page.getByRole("button", { name: "approved", exact: true }).click();
+  await expect(
+    page.getByRole("row", { name: /Acme School/ }).getByText("approved", { exact: true }),
+  ).toBeVisible();
+  await page.screenshot({ path: `${SHOTS}/organizations-1440.png`, fullPage: true });
+
+  // Membership is staffed from the same screen.
+  await page.getByRole("row", { name: /Acme School/ }).getByRole("button", { name: "Manage" }).click();
+  await expect(page.getByRole("heading", { name: /Members of Acme School/ })).toBeVisible();
+  const addAccount = page.getByRole("combobox", { name: "Add account" });
+  const addedUserId = await addAccount.locator("option").nth(1).getAttribute("value");
+  await addAccount.selectOption({ index: 1 });
+  await page.getByRole("combobox", { name: "Role", exact: true }).selectOption("reviewer");
+  await page.getByRole("button", { name: /Add member/i }).click();
+  await expect(page.getByRole("combobox", { name: /Role for/ }).last()).toHaveValue("reviewer");
+  await page.screenshot({ path: `${SHOTS}/organizations-members-1440.png`, fullPage: true });
+
+  // Clean up the membership this test just created. Without this, every run
+  // permanently grants another account reviewer rights in Acme School and the
+  // evidence assertion below stops holding.
+  await request.delete(
+    `http://127.0.0.1:8000/api/v1/admin/organizations/${organizations.items.find(org => org.name === "Acme School")!.id}/members/${addedUserId}`,
+    { headers: { Authorization: `Bearer ${adminToken}` } },
+  );
+
+  // Evidence queue lists submissions and deep-links into a decision.
+  await page.goto("/admin/evidence");
+  await expect(page.getByRole("heading", { name: "Evidence" })).toBeVisible();
+  await expect(page.locator("tbody tr").first()).toBeVisible();
+  await page.screenshot({ path: `${SHOTS}/evidence-1440.png`, fullPage: true });
+  // This admin holds no reviewer membership, so the action is not offered.
+  await expect(page.getByRole("link", { name: /Review/ })).toHaveCount(0);
+  await expect(page.getByText("no review scope").first()).toBeVisible();
+});
+
+test("reviewer is denied every platform-administration route", async ({ page }) => {
+  await signIn(page, REVIEWER);
+  for (const path of ["/admin/users", "/admin/organizations", "/admin/evidence"]) {
+    await page.goto(path);
+    await expect(page.getByText(/Restricted/).first()).toBeVisible();
+    await expect(page.locator("table")).toHaveCount(0);
+  }
+  // The reviewer keeps only the capability they actually hold.
+  await page.goto("/admin");
+  await expect(page.getByRole("link", { name: "Accounts", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("link", { name: "Organizations", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("link", { name: "Review decisions" })).toBeVisible();
+});
+
+test("account edit persists boolean flags and shows organization context", async ({ page, request }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+
+  const tokenResponse = await request.post(
+    "http://127.0.0.1:8099/realms/arborcursus/protocol/openid-connect/token",
+    { form: { grant_type: "password", client_id: "arborcursus-web", username: ADMIN.user, password: ADMIN.password } },
+  );
+  const adminToken = (await tokenResponse.json() as { access_token: string }).access_token;
+
+  await signIn(page, ADMIN);
+  await page.goto("/admin/users");
+  await page.getByRole("searchbox", { name: "Search accounts" }).fill("student");
+  await page.getByRole("row", { name: /student@local\.dev/ }).getByRole("button", { name: "Edit name" }).click();
+
+  // The editor shows which organization grants each role, because the flat
+  // `roles` column on the list cannot say that.
+  await expect(page.getByRole("heading", { name: "Organization roles" })).toBeVisible();
+  await expect(page.getByText("Acme School")).toBeVisible();
+  await page.screenshot({ path: `${SHOTS}/users-edit-1440.png`, fullPage: true });
+
+  const searchable = page.getByLabel("Recruiter searchable");
+  await searchable.check();
+  await page.getByRole("button", { name: "Save" }).click();
+  await expect(page.getByRole("heading", { name: "Account settings" })).toHaveCount(0);
+
+  // Persistence is checked against the API, not against the refreshed table.
+  const listed = await request.get("http://127.0.0.1:8000/api/v1/admin/users?q=student", {
+    headers: { Authorization: `Bearer ${adminToken}` },
+  });
+  const body = await listed.json() as {
+    items: { id: string; recruiter_searchable: boolean }[];
+  };
+  const account = body.items[0]!;
+  expect.soft(account.recruiter_searchable).toBe(true);
+
+  // An explicit null for a NOT NULL flag is refused by the API with 422, never 500.
+  const userId = account.id;
+  const nullPatch = await request.patch(`http://127.0.0.1:8000/api/v1/admin/users/${userId}`, {
+    headers: { Authorization: `Bearer ${adminToken}` },
+    data: { profile_public: null },
+  });
+  expect.soft(nullPatch.status()).toBe(422);
+
+  // Restore the flag so the fixture is not left mutated.
+  await request.patch(`http://127.0.0.1:8000/api/v1/admin/users/${userId}`, {
+    headers: { Authorization: `Bearer ${adminToken}` },
+    data: { recruiter_searchable: false },
+  });
 });

@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { ArrowRight, Building2, GraduationCap, ShieldCheck, ShieldQuestion } from "lucide-react";
+import { ArrowRight, Building2, ClipboardList, GraduationCap, ShieldCheck, Users } from "lucide-react";
 import { Link } from "react-router-dom";
 import { arbor } from "@/api/arbor";
 import { capabilitiesFor, decodeClaims, reviewOrganizations } from "@/auth/permissions";
@@ -11,11 +11,19 @@ export default function AdminOverview() {
   const { token } = useSession();
   const organizations = useQuery({ queryKey: ["organizations"], queryFn: () => arbor.organizations(token!) });
   const skills = useQuery({ queryKey: ["skills"], queryFn: arbor.skills });
+  // Platform totals, available only to a platform administrator.
+  const analytics = useQuery({
+    queryKey: ["admin-analytics"],
+    queryFn: () => arbor.analytics(token!),
+    enabled: capabilitiesFor(decodeClaims(token), organizations.data).has("analytics.read"),
+  });
   const capabilities = capabilitiesFor(decodeClaims(token), organizations.data);
   const reviewerOrgs = reviewOrganizations(organizations.data);
   const counts = skills.data ? countSkills(skills.data) : undefined;
 
-  if (organizations.isLoading || skills.isLoading) return <LoadingBlock label="Loading console summary…" />;
+  if (organizations.isLoading || skills.isLoading || analytics.isLoading) {
+    return <LoadingBlock label="Loading console summary…" />;
+  }
   if (organizations.isError || skills.isError) {
     return (
       <ErrorBlock
@@ -43,6 +51,27 @@ export default function AdminOverview() {
           <span>Review organizations</span>
           <strong>{reviewerOrgs.length}</strong>
           <small>Approved memberships with reviewer or admin role</small>
+        </Panel>
+        <Panel className="admin-metric">
+          <span>Accounts</span>
+          <strong>{analytics.data?.users ?? "—"}</strong>
+          <small>GET /admin/analytics</small>
+        </Panel>
+        <Panel className="admin-metric">
+          <span>Organizations awaiting approval</span>
+          <strong>{analytics.data?.organizations.pending ?? "—"}</strong>
+          <small>
+            {analytics.data
+              ? `${analytics.data.organizations.approved} approved of ${analytics.data.organizations.total}`
+              : "Platform administrators only"}
+          </small>
+        </Panel>
+        <Panel className="admin-metric">
+          <span>Evidence verified</span>
+          <strong>{analytics.data?.evidence.by_status.verified ?? "—"}</strong>
+          <small>
+            {analytics.data ? `${analytics.data.evidence.total} submitted in total` : "Platform administrators only"}
+          </small>
         </Panel>
         <Panel className="admin-metric">
           <span>Taxonomy authoring</span>
@@ -103,18 +132,47 @@ export default function AdminOverview() {
         </Panel>
       </div>
 
-      <Panel className="admin-card admin-limits">
-        <div className="admin-card-head">
-          <ShieldQuestion size={18} />
-          <h2>Not available in this backend</h2>
+      {/* Platform-wide sections are offered only to a platform administrator;
+          a reviewer would otherwise land on a Restricted page. */}
+      {capabilities.has("users.manage") && (
+        <div className="admin-grid">
+          <Panel className="admin-card">
+            <div className="admin-card-head">
+              <Users size={18} />
+              <h2>Accounts</h2>
+              <Status tone="neutral">{analytics.data?.users ?? 0} total</Status>
+            </div>
+            <p>Search accounts, inspect their organization roles, and correct a display name.</p>
+            <Link to="/admin/users" className="admin-card-link">
+              Open accounts <ArrowRight size={15} />
+            </Link>
+          </Panel>
+          <Panel className="admin-card">
+            <div className="admin-card-head">
+              <Building2 size={18} />
+              <h2>Organizations</h2>
+              <Status tone={analytics.data?.organizations.pending ? "warning" : "success"}>
+                {analytics.data?.organizations.pending ?? 0} pending
+              </Status>
+            </div>
+            <p>Approve or revoke an organization, then staff it with reviewer and recruiter roles.</p>
+            <Link to="/admin/organizations" className="admin-card-link">
+              Open organizations <ArrowRight size={15} />
+            </Link>
+          </Panel>
+          <Panel className="admin-card">
+            <div className="admin-card-head">
+              <ClipboardList size={18} />
+              <h2>Evidence</h2>
+              <Status tone="neutral">{analytics.data?.evidence.total ?? 0} submitted</Status>
+            </div>
+            <p>Browse every submission and jump straight into a decision with the row preselected.</p>
+            <Link to="/admin/evidence" className="admin-card-link">
+              Open evidence <ArrowRight size={15} />
+            </Link>
+          </Panel>
         </div>
-        <ul>
-          <li>No endpoint lists users, so there is no user administration screen.</li>
-          <li>No endpoint lists or approves organizations; approval stays an operator action.</li>
-          <li>No endpoint lists pending evidence, so review is ID-based by necessity.</li>
-          <li>No platform analytics endpoint, so every number above comes from a real response.</li>
-        </ul>
-      </Panel>
+      )}
     </div>
   );
 }

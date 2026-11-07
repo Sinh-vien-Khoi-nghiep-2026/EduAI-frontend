@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { CheckCircle2, ShieldCheck, XCircle } from "lucide-react";
 import { type FormEvent, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { arbor } from "@/api/arbor";
 import { reviewOrganizations } from "@/auth/permissions";
 import { useSession } from "@/auth/session";
@@ -29,8 +30,10 @@ export default function AdminReviews() {
   const { token } = useSession();
   const client = useQueryClient();
   const organizations = useQuery({ queryKey: ["organizations"], queryFn: () => arbor.organizations(token!) });
+  const [params] = useSearchParams();
   const [organizationId, setOrganizationId] = useState("");
-  const [evidenceId, setEvidenceId] = useState("");
+  // The admin evidence list deep-links here with the row preselected.
+  const [evidenceId, setEvidenceId] = useState(params.get("evidence") ?? "");
   const [status, setStatus] = useState<Decision>("verified");
   const [note, setNote] = useState("");
   const [formError, setFormError] = useState<Error>();
@@ -51,6 +54,10 @@ export default function AdminReviews() {
       setEvidenceId("");
       setNote("");
       void client.invalidateQueries({ queryKey: ["my-skills"] });
+      // A decision changes evidence status, so the queue and the analytics
+      // counters derived from it are stale until refetched.
+      void client.invalidateQueries({ queryKey: ["admin-evidence"] });
+      void client.invalidateQueries({ queryKey: ["admin-analytics"] });
     },
   });
 

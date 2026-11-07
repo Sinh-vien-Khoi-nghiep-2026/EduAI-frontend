@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { ArrowLeft, Building2, GraduationCap, LayoutDashboard, Menu, ShieldCheck, X } from "lucide-react";
+import { ArrowLeft, Building2, ClipboardList, GraduationCap, LayoutDashboard, Menu, ShieldCheck, Users, X } from "lucide-react";
 import { useState } from "react";
 import { NavLink, Outlet, useLocation } from "react-router-dom";
 import { arbor } from "@/api/arbor";
@@ -10,7 +10,10 @@ import { Button, Status } from "@/components/app-ui";
 const sections = [
   { to: "/admin", label: "Overview", icon: LayoutDashboard, end: true, capability: null },
   { to: "/admin/taxonomy", label: "Skill taxonomy", icon: GraduationCap, end: false, capability: "taxonomy.write" as const },
-  { to: "/admin/reviews", label: "Evidence review", icon: ShieldCheck, end: false, capability: "evidence.review" as const },
+  { to: "/admin/users", label: "Accounts", icon: Users, end: false, capability: "users.manage" as const },
+  { to: "/admin/organizations", label: "Organizations", icon: Building2, end: false, capability: "organizations.manage" as const },
+  { to: "/admin/evidence", label: "Evidence", icon: ClipboardList, end: false, capability: "evidence.browse" as const },
+  { to: "/admin/reviews", label: "Review decisions", icon: ShieldCheck, end: false, capability: "evidence.review" as const },
   { to: "/admin/access", label: "Access scope", icon: Building2, end: false, capability: null },
 ] as const;
 

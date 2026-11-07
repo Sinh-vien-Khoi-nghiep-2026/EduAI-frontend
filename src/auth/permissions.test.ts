@@ -34,24 +34,22 @@ test("undecodable tokens yield no claims instead of throwing", () => {
   }
 });
 
-test("platform admin follows backend truthiness of the configurable claim", () => {
+test("platform admin requires the JSON boolean true, matching the backend", () => {
   expect(isPlatformAdmin({ platform_admin: true })).toBeTrue();
-  expect(isPlatformAdmin({ platform_admin: "true" })).toBeTrue();
-  expect(isPlatformAdmin({ platform_admin: 1 })).toBeTrue();
-  // Python bool() treats these as falsy; the console must agree.
-  expect(isPlatformAdmin({ platform_admin: false })).toBeFalse();
-  expect(isPlatformAdmin({ platform_admin: "" })).toBeFalse();
-  expect(isPlatformAdmin({ platform_admin: 0 })).toBeFalse();
-  expect(isPlatformAdmin({ platform_admin: null })).toBeFalse();
+  // The backend rejects every non-boolean value, including truthy ones.
+  for (const value of ["true", "false", "0", "1", "no", "yes", "", 0, 1, [], ["platform_admin"], {}, null]) {
+    expect(isPlatformAdmin({ platform_admin: value })).toBeFalse();
+  }
   expect(isPlatformAdmin(undefined)).toBeFalse();
+  expect(isPlatformAdmin({})).toBeFalse();
 });
 
-test("platform admin also resolves through Keycloak role containers", () => {
-  expect(isPlatformAdmin({ roles: ["platform_admin"] })).toBeTrue();
-  expect(isPlatformAdmin({ realm_access: { roles: ["platform_admin"] } })).toBeTrue();
+test("realm role containers do not grant platform administration", () => {
+  // The backend only reads the configured claim; mirroring role containers here
+  // would render controls that always answer 403.
+  expect(isPlatformAdmin({ roles: ["platform_admin"] })).toBeFalse();
+  expect(isPlatformAdmin({ realm_access: { roles: ["platform_admin"] } })).toBeFalse();
   expect(isPlatformAdmin({ roles: ["member"] })).toBeFalse();
-  expect(isPlatformAdmin({ realm_access: { roles: "platform_admin" } })).toBeFalse();
-  expect(isPlatformAdmin({ realm_access: "platform_admin" })).toBeFalse();
 });
 
 test("respects a renamed platform admin claim", () => {

@@ -9,17 +9,15 @@ import type { Organization } from "@/api/arbor";
  * forged claim can only ever produce a visible button that fails with 403.
  */
 
-export type Capability = "taxonomy.write" | "evidence.review";
+export type Capability =
+  | "taxonomy.write"
+  | "evidence.review"
+  | "users.manage"
+  | "organizations.manage"
+  | "evidence.browse"
+  | "analytics.read";
 
 export type Claims = Record<string, unknown>;
-
-/** Backend truthiness (`bool(claims.get(name, False))`), not JS truthiness. */
-function backendTruthy(value: unknown): boolean {
-  if (value === null || value === undefined || value === false) return false;
-  if (typeof value === "number") return value !== 0;
-  if (typeof value === "string") return value.length > 0;
-  return true;
-}
 
 export function decodeClaims(token: string | null | undefined): Claims | undefined {
   if (!token) return undefined;
@@ -40,21 +38,18 @@ export function decodeClaims(token: string | null | undefined): Claims | undefin
 }
 
 /**
- * The backend reads a single configurable claim (`PLATFORM_ADMIN_CLAIM`,
- * default `platform_admin`). We also accept the common Keycloak role
- * containers so a realm that maps the role into `roles`/`realm_access` works.
+ * The backend reads one configurable claim (`PLATFORM_ADMIN_CLAIM`, default
+ * `platform_admin`) and accepts only the JSON boolean `true` — see
+ * `is_platform_admin` in `app/api/dependencies.py`. This mirrors that contract
+ * exactly, so the UI never offers platform controls the API would refuse.
+ *
+ * `roles` and `realm_access.roles` are deliberately **not** consulted: the
+ * backend does not read them, and treating them as authorization here would
+ * show administrative screens to an account the API answers with 403.
  */
 export function isPlatformAdmin(claims: Claims | undefined, claimName = "platform_admin"): boolean {
   if (!claims) return false;
-  if (backendTruthy(claims[claimName])) return true;
-  const roles = claims.roles;
-  if (Array.isArray(roles) && roles.includes("platform_admin")) return true;
-  const realm = claims.realm_access;
-  if (typeof realm === "object" && realm !== null && "roles" in realm) {
-    const realmRoles: unknown = realm.roles;
-    if (Array.isArray(realmRoles) && realmRoles.includes("platform_admin")) return true;
-  }
-  return false;
+  return claims[claimName] === true;
 }
 
 /** Organizations where this user may review evidence: approved + reviewer/admin role. */
@@ -69,7 +64,13 @@ export function capabilitiesFor(
   organizations: Organization[] | undefined,
 ): Set<Capability> {
   const capabilities = new Set<Capability>();
-  if (isPlatformAdmin(claims)) capabilities.add("taxonomy.write");
+  if (isPlatformAdmin(claims)) {
+    capabilities.add("taxonomy.write");
+    capabilities.add("users.manage");
+    capabilities.add("organizations.manage");
+    capabilities.add("evidence.browse");
+    capabilities.add("analytics.read");
+  }
   if (reviewOrganizations(organizations).length > 0) capabilities.add("evidence.review");
   return capabilities;
 }
