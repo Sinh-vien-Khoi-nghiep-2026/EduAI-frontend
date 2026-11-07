@@ -3,7 +3,7 @@ import { rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { runtimeConfig } from "./src/runtime-config";
 
-const outdir = path.join(process.cwd(), "dist");
+const outdir = process.env.DIST_DIR ?? path.join(process.cwd(), "dist");
 await rm(outdir, { recursive: true, force: true });
 
 const result = await Bun.build({

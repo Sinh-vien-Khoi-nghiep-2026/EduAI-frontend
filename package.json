@@ -13,7 +13,8 @@
     "build": "bun run build.ts",
     "test": "bun test",
     "typecheck": "bunx tsc --noEmit",
-    "lint": "eslint \"src/**/*.{ts,tsx}\" --max-warnings=0"
+    "lint": "eslint \"src/**/*.{ts,tsx}\" --max-warnings=0",
+    "test:e2e": "bunx playwright test"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.101.4",
@@ -29,6 +30,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@playwright/test": "^1.65.0",
     "@types/bun": "latest",
     "@types/react": "^19",
     "@types/react-dom": "^19",

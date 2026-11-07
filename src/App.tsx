@@ -4,6 +4,12 @@ import "./index.css";
 import { apiOrigin, shouldRetryQuery } from "@/api/client";
 import { SessionProvider } from "@/auth/session";
 import { ProtectedRoute } from "@/auth/ProtectedRoute";
+import { AdminGuard } from "@/auth/AdminGuard";
+import { AdminLayout } from "@/layout/AdminLayout";
+import AdminAccess from "@/pages/admin/AdminAccess";
+import AdminOverview from "@/pages/admin/AdminOverview";
+import AdminReviews from "@/pages/admin/AdminReviews";
+import AdminTaxonomy from "@/pages/admin/AdminTaxonomy";
 import { AppLayout, RecruiterAccess } from "@/layout/AppLayout";
 import Candidates from "@/pages/Candidates";
 import Callback from "@/pages/Callback";
@@ -23,7 +29,7 @@ const client = new QueryClient({ defaultOptions: { queries: { retry: shouldRetry
 
 export function App() {
   if (!apiOrigin()) return <ConfigurationError/>;
-  return <QueryClientProvider client={client}><SessionProvider><BrowserRouter><Routes><Route path="/connect" element={<Connect/>}/><Route path="/callback" element={<Callback/>}/><Route element={<ProtectedRoute/>}><Route element={<AppLayout/>}><Route path="/" element={<Dashboard/>}/><Route path="/skills" element={<Skills/>}/><Route path="/portfolio" element={<Portfolio/>}/><Route path="/records" element={<Records/>}/><Route path="/organizations" element={<Organizations/>}/><Route path="/integrations" element={<Integrations/>}/><Route path="/notifications" element={<Notifications/>}/><Route path="/evidence" element={<Evidence/>}/><Route path="/candidates" element={<RecruiterAccess><Candidates/></RecruiterAccess>}/></Route></Route><Route path="/404" element={<NotFound/>}/><Route path="*" element={<Navigate to="/404" replace/>}/></Routes></BrowserRouter></SessionProvider></QueryClientProvider>;
+  return <QueryClientProvider client={client}><SessionProvider><BrowserRouter><Routes><Route path="/connect" element={<Connect/>}/><Route path="/callback" element={<Callback/>}/><Route element={<ProtectedRoute/>}><Route element={<AppLayout/>}><Route path="/" element={<Dashboard/>}/><Route path="/skills" element={<Skills/>}/><Route path="/portfolio" element={<Portfolio/>}/><Route path="/records" element={<Records/>}/><Route path="/organizations" element={<Organizations/>}/><Route path="/integrations" element={<Integrations/>}/><Route path="/notifications" element={<Notifications/>}/><Route path="/evidence" element={<Evidence/>}/><Route path="/candidates" element={<RecruiterAccess><Candidates/></RecruiterAccess>}/></Route><Route path="/admin" element={<AdminGuard><AdminLayout/></AdminGuard>}><Route index element={<AdminOverview/>}/><Route path="taxonomy" element={<AdminTaxonomy/>}/><Route path="reviews" element={<AdminReviews/>}/><Route path="access" element={<AdminAccess/>}/></Route></Route><Route path="/404" element={<NotFound/>}/><Route path="*" element={<Navigate to="/404" replace/>}/></Routes></BrowserRouter></SessionProvider></QueryClientProvider>;
 }
 
 export default App;

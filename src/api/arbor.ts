@@ -16,6 +16,9 @@ export type EvidenceInput = { source: string; external_id?: string; url?: string
 export type EvidenceCreated = { id: string; revision: number; status: string };
 export type EvidenceReview = { id: string; status: string; evidence_revision: number };
 
+export type SkillCreateInput = { stable_id: string; name: string; path?: string; parent_id?: string | null };
+export type SkillCreated = { id: string; stable_id: string; name: string };
+
 const auth = (token: string) => ({ token });
 export const arbor = {
   authConfig: () => request<AuthConfig>("/auth/config"),
@@ -24,6 +27,7 @@ export const arbor = {
   organizations: (token: string) => request<Organization[]>("/organizations/mine", auth(token)),
   createOrganization: (token: string, body: { name: string; kind: string }) => request<{ id: string; approved: boolean; role: string }>("/organizations", { ...auth(token), method: "POST", body }),
   skills: () => request<Skill[]>("/skills"),
+  createSkill: (token: string, body: SkillCreateInput) => request<SkillCreated>("/skills", { ...auth(token), method: "POST", body }),
   mySkills: (token: string) => request<SkillTree>("/skills/me", auth(token)),
   skillTree: (token: string) => request<SkillTree>("/skill-trees/me", auth(token)),
   saveSkill: (token: string, body: { skill_id: string; level: number; evidence_id?: string }) => request<{ skill_id: string; level: number; status: string }>("/skills/me/progress", { ...auth(token), method: "PUT", body }),
