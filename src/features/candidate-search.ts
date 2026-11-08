@@ -1,5 +1,5 @@
 export type Criterion = { skill_id: string; min_level: number };
-export type SearchFilters = { organization_id: string; match: "all" | "any"; skills: Criterion[]; verified_only: boolean; school_id?: string; require_shared_project: boolean };
+export type SearchFilters = { organization_id: string; match: "all" | "any"; skills: Criterion[]; verified_only: boolean; school_id: string; require_shared_project: boolean };
 export type SubmittedSearch = SearchFilters & { page: number; page_size: number };
 
 export function criterionFrom(skillId: string, levelValue: string, existing: Criterion[]): Criterion {
@@ -14,6 +14,7 @@ export function criterionFrom(skillId: string, levelValue: string, existing: Cri
 
 export function submitSearch(filters: SearchFilters): SubmittedSearch {
   if (!filters.organization_id) throw new Error("Choose an approved company organization.");
+  if (!filters.school_id) throw new Error("Choose a target school.");
   if (filters.skills.length > 50) throw new Error("Candidate search supports at most 50 skill criteria.");
   return { ...filters, skills: filters.skills.map(item => ({ ...item })), page: 1, page_size: 20 };
 }
@@ -24,12 +25,16 @@ export function pageFor(search: SubmittedSearch, page: number): SubmittedSearch 
 }
 
 /**
- * Results belong to the request that produced them. Once the selected company
- * changes, anything already on screen came from a different organization and
- * must not be presented as its results.
+ * Results belong to the request that produced them. Once either scope — the
+ * hiring company or the target school — changes, anything already on screen
+ * came from a different request and must not be presented as its results.
  */
-export function isStaleResult(submitted: SubmittedSearch | null, currentOrganizationId: string): boolean {
+export function isStaleResult(
+  submitted: SubmittedSearch | null,
+  currentOrganizationId: string,
+  currentSchoolId: string,
+): boolean {
   if (!submitted) return true;
-  return submitted.organization_id !== currentOrganizationId;
+  return submitted.organization_id !== currentOrganizationId || submitted.school_id !== currentSchoolId;
 }
 

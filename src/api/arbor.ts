@@ -110,5 +110,5 @@ export const arbor = {
   notifications: (token: string) => request<Notification[]>("/notifications", auth(token)),
   markNotificationRead: (token: string, id: string) => request<{ read: true }>(`/notifications/${encodeURIComponent(id)}/read`, { ...auth(token), method: "POST" }),
   integrations: (token: string) => request<Integration[]>("/integrations", auth(token)),
-  candidateSearch: (token: string, body: { organization_id: string; match: "all" | "any"; skills: { skill_id: string; min_level: number }[]; verified_only: boolean; school_id?: string; require_shared_project: boolean; page: number; page_size: number }) => request<CandidateResult>("/candidates/search", { ...auth(token), method: "POST", body }),
+  candidateSearch: (token: string, body: { organization_id: string; match: "all" | "any"; skills: { skill_id: string; min_level: number }[]; verified_only: boolean; school_id: string; require_shared_project: boolean; page: number; page_size: number }) => request<CandidateResult>("/candidates/search", { ...auth(token), method: "POST", body }),
 };

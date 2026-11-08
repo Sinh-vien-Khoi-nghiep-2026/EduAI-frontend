@@ -25,9 +25,15 @@ test("candidate criteria reject invalid levels, duplicates, and backend-limit ov
   expect(() => pageFor(submitSearch(makeFilters()), 0)).toThrow("positive whole number");
 });
 
+test("submitSearch requires an explicit target school", () => {
+  expect(() => submitSearch({ ...makeFilters(), school_id: "" })).toThrow("Choose a target school.");
+  expect(submitSearch(makeFilters()).school_id).toBe("school-id");
+});
+
 test("empty skills are accepted by submitSearch and produce valid request body with skills: []", () => {
   const noSkills: SearchFilters = {
     organization_id: "company-id",
+    school_id: "school-id",
     match: "all",
     skills: [],
     verified_only: false,
@@ -42,13 +48,14 @@ test("empty skills are accepted by submitSearch and produce valid request body w
   expect(submitted.require_shared_project).toBe(false);
 });
 
-test("results are stale when nothing was submitted or the selected company changed", () => {
+test("results are stale when nothing was submitted or either scope changed", () => {
   const submitted = submitSearch(makeFilters());
-  expect(isStaleResult(null, "company-id")).toBe(true);
-  expect(isStaleResult(submitted, "company-id")).toBe(false);
-  expect(isStaleResult(submitted, "other-company")).toBe(true);
-  expect(isStaleResult(submitted, "")).toBe(true);
+  expect(isStaleResult(null, "company-id", "school-id")).toBe(true);
+  expect(isStaleResult(submitted, "company-id", "school-id")).toBe(false);
+  expect(isStaleResult(submitted, "other-company", "school-id")).toBe(true);
+  expect(isStaleResult(submitted, "company-id", "other-school")).toBe(true);
+  expect(isStaleResult(submitted, "", "")).toBe(true);
 
-  // Pagination keeps the same organization, so a paged result stays current.
-  expect(isStaleResult(pageFor(submitted, 3), "company-id")).toBe(false);
+  // Pagination keeps the same scopes, so a paged result stays current.
+  expect(isStaleResult(pageFor(submitted, 3), "company-id", "school-id")).toBe(false);
 });

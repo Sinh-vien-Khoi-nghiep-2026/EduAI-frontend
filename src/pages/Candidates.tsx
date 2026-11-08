@@ -9,6 +9,7 @@ import { Button, EmptyBlock, ErrorBlock, Field, formatError, LoadingBlock, PageH
 export default function Candidates() {
   const { token } = useSession();
   const [organizationId, setOrganizationId] = useState("");
+  const [schoolId, setSchoolId] = useState("");
   const [criteria, setCriteria] = useState<Criterion[]>([]);
   const [skill, setSkill] = useState("");
   const [minimum, setMinimum] = useState("5");
@@ -18,6 +19,7 @@ export default function Candidates() {
   const [error, setError] = useState("");
   const [submitted, setSubmitted] = useState<SubmittedSearch | null>(null);
   const orgs = useQuery({ queryKey: ["organizations"], queryFn: () => arbor.organizations(token!) });
+  const approved = useQuery({ queryKey: ["approved-organizations"], queryFn: () => arbor.approvedOrganizations(token!) });
   const taxonomy = useQuery({ queryKey: ["skills"], queryFn: arbor.skills });
   const search = useMutation({ mutationFn: (request: SubmittedSearch) => arbor.candidateSearch(token!, request) });
   // Any change to the filters invalidates the visible results: they were produced
@@ -38,7 +40,7 @@ export default function Candidates() {
   }
   function submit() {
     setError("");
-    const draft: SearchFilters = { organization_id: organizationId, match, skills: criteria, verified_only: verified, require_shared_project: sharedProject };
+    const draft: SearchFilters = { organization_id: organizationId, school_id: schoolId, match, skills: criteria, verified_only: verified, require_shared_project: sharedProject };
     try {
       const request = submitSearch(draft);
       search.reset();
@@ -52,10 +54,12 @@ export default function Candidates() {
     setSubmitted(request);
     search.mutate(request, { onError: cause => setError(formatError(cause)) });
   }
-  if (orgs.isLoading || taxonomy.isLoading) return <LoadingBlock label="Preparing candidate search…"/>;
-  if (orgs.isError || taxonomy.isError) return <ErrorBlock message="Search requirements could not be loaded." retry={() => void Promise.all([orgs.refetch(), taxonomy.refetch()])}/>;
+  if (orgs.isLoading || taxonomy.isLoading || approved.isLoading) return <LoadingBlock label="Preparing candidate search…"/>;
+  if (orgs.isError || taxonomy.isError || approved.isError) return <ErrorBlock message="Search requirements could not be loaded." retry={() => void Promise.all([orgs.refetch(), taxonomy.refetch(), approved.refetch()])}/>;
   const companies = orgs.data?.filter(item => item.approved && item.kind === "company" && (item.role === "recruiter" || item.role === "admin")) ?? [];
   const activeCompany = companies.find(item => item.id === organizationId);
+  const schools = approved.data?.filter(item => item.kind === "school") ?? [];
+  const activeSchool = schools.find(item => item.id === schoolId);
 
   return (
     <div className="stack">
@@ -75,6 +79,23 @@ export default function Candidates() {
               {companies.map(item => (
                 <option key={item.id} value={item.id}>
                   {item.name} · {item.role}
+                </option>
+              ))}
+            </select>
+          </Field>
+          <Field
+            label="Target school"
+            hint={
+              activeSchool
+                ? `Limited to candidates in ${activeSchool.name}.`
+                : "Choose the approved school whose candidates you may search. The API requires an explicit school scope."
+            }
+          >
+            <select value={schoolId} onChange={event => { setSchoolId(event.target.value); resetResults(); }}>
+              <option value="">Select target school</option>
+              {schools.map(item => (
+                <option key={item.id} value={item.id}>
+                  {item.name}
                 </option>
               ))}
             </select>
@@ -143,7 +164,10 @@ export default function Candidates() {
             </label>
           </div>
           {error && <p className="form-error">{error}</p>}
-          <Button onClick={submit} disabled={search.isPending || companies.length === 0}>
+          {(!organizationId || !schoolId) && (
+            <p className="muted">Choose both a company organization and a target school before searching.</p>
+          )}
+          <Button onClick={submit} disabled={search.isPending || !organizationId || !schoolId}>
             <Search size={16} />
             {search.isPending ? "Searching…" : "Search candidates"}
           </Button>
@@ -151,7 +175,7 @@ export default function Candidates() {
       </Panel>
 
       {search.isError && <ErrorBlock message={formatError(search.error)} />}
-      {search.data && !isStaleResult(submitted, organizationId) && (
+      {search.data && !isStaleResult(submitted, organizationId, schoolId) && (
         <Panel>
           <h2 className="section-title">Results · page {search.data.page}</h2>
           {search.data.items.length ? (
