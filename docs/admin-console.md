@@ -100,8 +100,10 @@ uv run --frozen python tests/fixtures/dev-idp.py     # http://127.0.0.1:8099
 BUN_PUBLIC_API_BASE_URL=http://127.0.0.1:8000 bun --hot src/index.ts   # http://localhost:8081
 ```
 
-Dev identities (development only, never real credentials): `admin@local.dev` / `admin`
-(`platform_admin: true`), `reviewer@local.dev` / `reviewer`, `student@local.dev` / `student`.
+Dev identities (development only, never real credentials; all seeded in
+`tests/fixtures/dev-idp.py`): `admin@local.dev` / `admin` (`platform_admin: true`),
+`reviewer@local.dev` / `reviewer`, `recruiter@local.dev` / `recruiter` (candidate
+search), `student@local.dev` / `student`, `student2@local.dev` / `student2`.
 Reviewer eligibility requires an approved organization membership; grant it with
 `ALTER`-style operator SQL or a seed — there is no API for it (see blocker 3).
 
