@@ -9,19 +9,21 @@ const original = {
   data: { sha: "abc" },
 };
 
-test("manual-ID mode sends no data key and nulls a blank external id", () => {
+test("manual-ID mode omits url and external_id entirely when they are blank", () => {
+  // An explicit null CLEARS the column server-side. Manual mode never loaded
+  // those values, so a blank box must mean "untouched", not "erase".
   const patch = buildEvidencePatch(
     { source: "github", title: "New title", url: "", external_id: "" },
     null,
     null,
   );
   expect("data" in patch).toBe(false);
-  expect(patch.external_id).toBeNull();
-  expect(patch.url).toBeNull();
-  expect(patch.title).toBe("New title");
+  expect("url" in patch).toBe(false);
+  expect("external_id" in patch).toBe(false);
+  expect(patch).toEqual({ source: "github", title: "New title" });
 });
 
-test("manual-ID mode keeps a typed external id", () => {
+test("manual-ID mode includes a typed url and external id", () => {
   const patch = buildEvidencePatch(
     { source: "github", title: "T", url: "https://x.test", external_id: "gh-9" },
     null,

@@ -113,6 +113,8 @@ function RecruiterSharingPanel() {
   });
 
   const grantOrgIds = activeRecruiterSearchOrgIds(grants.data ?? []);
+  // A school can never match a recruiter search, so only companies are offered.
+  const companies = (approved.data ?? []).filter(org => org.kind === "company");
   const recruiterSearchable = Boolean(user?.recruiter_searchable);
   const warning = recruiterSharingWarning(recruiterSearchable, grantOrgIds);
 
@@ -120,18 +122,18 @@ function RecruiterSharingPanel() {
     <Panel>
       <h2 className="section-title">Recruiter search sharing</h2>
       <p className="section-copy">
-        Approved organizations you allow here can find your profile in recruiter search. Nothing is
-        shared until you allow it, and turning an organization off removes its access.
+        Approved companies you allow here can find your profile in recruiter search. Nothing is
+        shared until you allow it, and turning a company off removes its access.
       </p>
       {warning === "no_grant" && (
         <p className="form-error">
-          Recruiter search is on, but no organization can see your profile yet. Allow at least one
-          organization below.
+          Recruiter search is on, but no company can see your profile yet. Allow at least one
+          company below.
         </p>
       )}
       {warning === "not_searchable" && (
         <p className="notice">
-          You allow organizations to search for you, but recruiter search is currently off, so your
+          You allow companies to search for you, but recruiter search is currently off, so your
           profile stays hidden. Turn recruiter search on above.
         </p>
       )}
@@ -147,18 +149,21 @@ function RecruiterSharingPanel() {
         />
         <span>
           <strong>Recruiter search is {recruiterSearchable ? "on" : "off"}</strong>
-          <small>This must be on for any organization below to find you.</small>
+          <small>This must be on for any company below to find you.</small>
         </span>
       </label>
       {error && <p className="form-error">{formatError(error)}</p>}
-      {approved.isLoading && <LoadingBlock label="Loading approved organizations…" />}
+      {approved.isLoading && <LoadingBlock label="Loading approved companies…" />}
       {approved.isError && <ErrorBlock message={formatError(approved.error)} retry={() => void approved.refetch()} />}
       {approved.data && grants.data && (
-        approved.data.length === 0 ? (
-          <EmptyBlock title="No approved organizations" description="No approved organization is available to share recruiter search with yet." />
+        companies.length === 0 ? (
+          <EmptyBlock
+            title="No approved company"
+            description="Recruiter search needs an approved company organization, not a school. Once an operator approves a company it appears here."
+          />
         ) : (
           <div className="organization-list">
-            {approved.data.map(org => {
+            {companies.map(org => {
               const allowed = grantOrgIds.has(org.id);
               return (
                 <div className="org-row" key={org.id}>

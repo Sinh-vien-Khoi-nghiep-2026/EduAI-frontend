@@ -203,10 +203,9 @@ test("editing only the title preserves stored metadata and bumps the revision", 
   expect(after!.data).toEqual(metadata);
   expect(after!.revision).toBe(evidence.revision + 1);
 
-  // Manual-ID mode loads nothing, so the dialog must not send the `data` key at
-  // all: a full-record PATCH used to write `data: {}` over metadata the learner
-  // never saw. `external_id` and `url` ARE fields the dialog shows, so they are
-  // applied (an empty box clears them) — that part is intended.
+  // Manual-ID mode loads nothing, so it must not send keys it could not show.
+  // Leaving url and external_id blank means "untouched": sending null would
+  // CLEAR them server-side, erasing metadata the learner never edited.
   const manualTitle = `E2E edit-manual ${Date.now()}`;
   const manualExternalId = `acme/manual#${Date.now()}`;
   const manualCreated = await request.post("http://127.0.0.1:8000/api/v1/evidence/me", {
@@ -225,6 +224,8 @@ test("editing only the title preserves stored metadata and bumps the revision", 
   await manualDialog.getByRole("button", { name: "Update evidence" }).click();
   await expect(manualDialog).toBeHidden();
 
+  await page.reload();
+  await expect(page.getByRole("heading", { name: "My Evidence" })).toBeVisible();
   const listedAgain = await request.get("http://127.0.0.1:8000/api/v1/evidence/me", {
     headers: { Authorization: `Bearer ${studentToken}` },
   });
@@ -233,6 +234,7 @@ test("editing only the title preserves stored metadata and bumps the revision", 
   }>).find(item => item.id === manualEvidence.id);
   expect(manualAfter).toBeTruthy();
   expect(manualAfter!.title).toBe(`${manualTitle} (edited)`);
+  expect(manualAfter!.external_id).toBe(manualExternalId);
   expect(manualAfter!.data).toEqual(metadata);
   expect(manualAfter!.revision).toBe(manualEvidence.revision + 1);
 });

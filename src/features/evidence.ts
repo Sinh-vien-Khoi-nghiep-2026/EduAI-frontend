@@ -11,9 +11,13 @@ export type EvidenceEditSnapshot = {
 /**
  * Builds a partial PATCH body. Only fields that actually differ from what was
  * loaded are included, so a save that changes nothing sends `{}` and the server
- * leaves the record — and any verification — untouched. A manual-ID update has
- * no original to compare against, so it sends what the user typed and never
- * touches metadata it could not have shown.
+ * leaves the record — and any verification — untouched.
+ *
+ * The two modes split on what the user could see. Row edit loaded a snapshot,
+ * so a cleared value is a real edit and goes out as an explicit `null`. Manual
+ * "Update by ID" loaded nothing, so a blank url or external_id means "untouched"
+ * and those keys are omitted — sending null there would erase stored metadata
+ * the user never saw.
  */
 export function buildEvidencePatch(
   values: { source: string; title: string; url: string; external_id: string },
@@ -26,8 +30,13 @@ export function buildEvidencePatch(
   const external = values.external_id.trim();
 
   if (original === null) {
-    // Manual-ID mode: nothing was loaded, so metadata stays untouched.
-    return { source, title, url: url || null, external_id: external || null };
+    // Manual-ID mode: nothing was loaded, so the user cannot have edited url or
+    // external_id. An explicit null would CLEAR those columns, so a blank input
+    // omits the key entirely and the stored value survives.
+    const body: EvidencePatchInput = { source, title };
+    if (url) body.url = url;
+    if (external) body.external_id = external;
+    return body;
   }
 
   const body: EvidencePatchInput = {};
