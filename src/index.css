@@ -161,7 +161,10 @@
 .admin-inline-editor { padding:18px 20px; display:grid; gap:12px; }
 .admin-inline-row { display:flex; gap:10px; align-items:flex-end; flex-wrap:wrap; margin-top:8px; }
 .admin-inline-row .field { flex:1 1 220px; min-width:0; }
-.admin-inline-row input, .admin-inline-row select { min-height:38px; border:1px solid #cdd9d0; border-radius:6px; padding:8px 10px; background:#fff; font-size:13px; }
+.admin-inline-row input:not([type="checkbox"]):not([type="radio"]), .admin-inline-row select { min-height:38px; border:1px solid #cdd9d0; border-radius:6px; padding:8px 10px; background:#fff; font-size:13px; }
+input[type="checkbox"], input[type="radio"] { width:16px; height:16px; accent-color:#1d5945; vertical-align:middle; }
+.admin-memberships-section { display:grid; gap:6px; margin-top:8px; font-size:13px; }
+.admin-memberships-list { margin:0; padding-left:18px; display:grid; gap:4px; font-size:13px; color:#2e3f35; word-break:break-word; }
 .admin-table select { min-height:32px; border:1px solid #cdd9d0; border-radius:5px; padding:4px 6px; background:#fff; font-size:12px; }
 .admin-metric small { display:block; }
 @media (max-width: 800px) { .admin-inline-row .button { width:100%; } .admin-row-actions { gap:14px; } }

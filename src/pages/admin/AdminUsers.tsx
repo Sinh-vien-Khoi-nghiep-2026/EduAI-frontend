@@ -1,11 +1,16 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Search } from "lucide-react";
 import { useDeferredValue, useState } from "react";
-import { arbor, type AdminPage, type AdminUser } from "@/api/arbor";
+import { arbor, type AdminPage, type AdminUser, type AdminUserDetail } from "@/api/arbor";
 import { useSession } from "@/auth/session";
 import {
+  Button,
+  Dialog,
   EmptyBlock,
   ErrorBlock,
+  Field,
+  fieldError,
+  formatError,
   LoadingBlock,
   PageHeader,
   Panel,
@@ -15,15 +20,133 @@ import { formatDate } from "@/lib/display";
 
 const PAGE_SIZE = 20;
 
+function AdminAccountModalForm({
+  user,
+  isPending,
+  error,
+  onCancel,
+  onSave,
+}: {
+  user: AdminUserDetail;
+  isPending: boolean;
+  error: unknown;
+  onCancel: () => void;
+  onSave: (body: {
+    display_name: string | null;
+    profile_public: boolean;
+    recruiter_searchable: boolean;
+  }) => void;
+}) {
+  const [displayName, setDisplayName] = useState(user.display_name ?? "");
+  const [profilePublic, setProfilePublic] = useState(user.profile_public);
+  const [searchable, setSearchable] = useState(user.recruiter_searchable);
+
+  const nameError = fieldError(error, "display_name");
+  const profilePublicError = fieldError(error, "profile_public");
+  const searchableError = fieldError(error, "recruiter_searchable");
+  const generalError = error ? formatError(error) : null;
+
+  return (
+    <form
+      className="stack modal-fields"
+      onSubmit={event => {
+        event.preventDefault();
+        onSave({
+          display_name: displayName.trim() || null,
+          profile_public: profilePublic,
+          recruiter_searchable: searchable,
+        });
+      }}
+    >
+      <h2>Edit account</h2>
+      <p className="admin-note">
+        Editing {user.email ?? "this account"}. Email is owned by the identity provider and
+        cannot be changed here. Platform administration is never granted here: it comes from
+        the <code>platform_admin</code> token claim.
+      </p>
+
+      <Field label="Account email">
+        <input value={user.email ?? "no email"} readOnly disabled />
+      </Field>
+
+      <Field label="Display name" error={nameError}>
+        <input
+          aria-label="Display name"
+          value={displayName}
+          maxLength={200}
+          onChange={event => setDisplayName(event.target.value)}
+        />
+      </Field>
+
+      <label className="check-row">
+        <input
+          type="checkbox"
+          checked={profilePublic}
+          onChange={event => setProfilePublic(event.target.checked)}
+        />
+        <span>
+          <strong>Public profile</strong>
+          <small>
+            Controls whether the student profile is visible publicly. Profile visibility is
+            separate from recruiter search consent and does not make the account recruiter-searchable.
+          </small>
+        </span>
+      </label>
+      {profilePublicError && <small className="field-error">{profilePublicError}</small>}
+
+      <label className="check-row">
+        <input
+          type="checkbox"
+          checked={searchable}
+          onChange={event => setSearchable(event.target.checked)}
+        />
+        <span>
+          <strong>Recruiter searchable (administrative override)</strong>
+          <small>
+            The recruiter searchable flag is the student's own consent signal. Toggling this flag
+            here is an administrative override of the student's stated preference, not proof of
+            student consent, and should be exceptional.
+          </small>
+        </span>
+      </label>
+      {searchableError && <small className="field-error">{searchableError}</small>}
+
+      <div className="admin-memberships-section">
+        <strong>Organization roles</strong>
+        {user.memberships.length ? (
+          <ul className="admin-memberships-list">
+            {user.memberships.map(membership => (
+              <li key={`${membership.organization_id}-${membership.role}`}>
+                {membership.organization_name} — {membership.role} —{" "}
+                {membership.approved ? "approved" : "pending"}
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="muted">Not a member of any organization.</p>
+        )}
+      </div>
+
+      {generalError && <p className="form-error">{generalError}</p>}
+
+      <div className="form-actions">
+        <Button variant="secondary" onClick={onCancel} disabled={isPending}>
+          Cancel
+        </Button>
+        <Button type="submit" disabled={isPending}>
+          {isPending ? "Saving…" : "Save changes"}
+        </Button>
+      </div>
+    </form>
+  );
+}
+
 export default function AdminUsers() {
-  const { token } = useSession();
+  const { token, user: sessionUser } = useSession();
   const client = useQueryClient();
   const [query, setQuery] = useState("");
   const [page, setPage] = useState(1);
-  const [editing, setEditing] = useState<AdminUser | null>(null);
-  const [displayName, setDisplayName] = useState("");
-  const [profilePublic, setProfilePublic] = useState(false);
-  const [searchable, setSearchable] = useState(false);
+  const [editingUserId, setEditingUserId] = useState<string | null>(null);
   const deferred = useDeferredValue(query);
 
   const users = useQuery({
@@ -32,13 +155,10 @@ export default function AdminUsers() {
     placeholderData: (previous: AdminPage<AdminUser> | undefined) => previous,
   });
 
-  // Organization context for the account being edited. `roles` on the list is a
-  // flat union across organizations, so it cannot say which organization grants
-  // which role — the detail endpoint can.
   const detail = useQuery({
-    queryKey: ["admin-user", editing?.id],
-    queryFn: () => arbor.adminUser(token!, editing!.id),
-    enabled: Boolean(editing),
+    queryKey: ["admin-user", editingUserId],
+    queryFn: () => arbor.adminUser(token!, editingUserId!),
+    enabled: Boolean(editingUserId),
   });
 
   const save = useMutation({
@@ -56,7 +176,10 @@ export default function AdminUsers() {
     onSuccess: (_updated, body) => {
       void client.invalidateQueries({ queryKey: ["admin-users"] });
       void client.invalidateQueries({ queryKey: ["admin-user", body.id] });
-      setEditing(null);
+      if (sessionUser?.id === body.id) {
+        void client.invalidateQueries({ queryKey: ["me", token] });
+      }
+      setEditingUserId(null);
     },
   });
 
@@ -156,13 +279,11 @@ export default function AdminUsers() {
                         type="button"
                         className="admin-link-button"
                         onClick={() => {
-                          setEditing(user);
-                          setDisplayName(user.display_name ?? "");
-                          setProfilePublic(user.profile_public);
-                          setSearchable(user.recruiter_searchable);
+                          save.reset();
+                          setEditingUserId(user.id);
                         }}
                       >
-                        Edit name
+                        Edit account
                       </button>
                     </td>
                   </tr>
@@ -193,90 +314,42 @@ export default function AdminUsers() {
         )}
       </Panel>
 
-      {editing && (
-        <Panel className="admin-inline-editor">
-          <form
-            onSubmit={event => {
-              event.preventDefault();
-              save.mutate({
-                id: editing.id,
-                display_name: displayName.trim() || null,
-                profile_public: profilePublic,
-                recruiter_searchable: searchable,
-              });
-            }}
-          >
-            <h2 className="admin-form-title">Account settings</h2>
-            <p className="admin-note">
-              Editing {editing.email ?? "this account"}. Email is owned by the identity provider and
-              cannot be changed here. Platform administration is never granted here: it comes from
-              the <code>platform_admin</code> token claim, so organization roles shown below do not
-              confer it.
-            </p>
-            <div className="admin-inline-row">
-              <label>
-                Display name
-                <input
-                  aria-label="Display name"
-                  value={displayName}
-                  maxLength={200}
-                  onChange={event => setDisplayName(event.target.value)}
-                />
-              </label>
-              <label>
-                <input
-                  type="checkbox"
-                  checked={profilePublic}
-                  onChange={event => setProfilePublic(event.target.checked)}
-                />
-                Public profile
-              </label>
-              <label>
-                <input
-                  type="checkbox"
-                  checked={searchable}
-                  onChange={event => setSearchable(event.target.checked)}
-                />
-                Recruiter searchable
-              </label>
+      {editingUserId && (
+        <Dialog
+          title="Edit account"
+          onClose={() => {
+            setEditingUserId(null);
+            save.reset();
+          }}
+          dismissible={!save.isPending}
+        >
+          {detail.isLoading ? (
+            <LoadingBlock label="Loading account details…" />
+          ) : detail.isError ? (
+            <div className="stack">
+              <p className="form-error">{formatError(detail.error)}</p>
+              <div className="form-actions">
+                <Button variant="secondary" onClick={() => setEditingUserId(null)}>
+                  Close
+                </Button>
+              </div>
             </div>
-
-            <h3 className="admin-form-title">Organization roles</h3>
-            {detail.isLoading ? (
-              <p className="muted">Loading memberships…</p>
-            ) : detail.isError ? (
-              <p className="form-error">Memberships could not be loaded.</p>
-            ) : detail.data?.memberships.length ? (
-              <ul className="admin-memberships">
-                {detail.data.memberships.map(membership => (
-                  <li key={`${membership.organization_id}-${membership.role}`}>
-                    <strong>{membership.organization_name}</strong>
-                    <code className="admin-code">{membership.role}</code>
-                    <span className="muted">
-                      {membership.approved ? "approved" : "pending approval"}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <p className="muted">Not a member of any organization.</p>
-            )}
-
-            <div className="admin-inline-row">
-              <button type="submit" className="button button-primary" disabled={save.isPending}>
-                {save.isPending ? "Saving…" : "Save"}
-              </button>
-              <button
-                type="button"
-                className="button button-secondary"
-                onClick={() => setEditing(null)}
-              >
-                Cancel
-              </button>
-            </div>
-            {save.isError && <p className="form-error">The change could not be saved.</p>}
-          </form>
-        </Panel>
+          ) : detail.data ? (
+            <AdminAccountModalForm
+              key={detail.data.id}
+              user={detail.data}
+              isPending={save.isPending}
+              error={save.error}
+              onCancel={() => {
+                setEditingUserId(null);
+                save.reset();
+              }}
+              onSave={body => {
+                save.mutate({ id: detail.data.id, ...body });
+              }}
+            />
+          ) : null}
+        </Dialog>
       )}
     </div>
   );

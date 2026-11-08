@@ -14,7 +14,6 @@ export function criterionFrom(skillId: string, levelValue: string, existing: Cri
 
 export function submitSearch(filters: SearchFilters): SubmittedSearch {
   if (!filters.organization_id) throw new Error("Choose an approved company organization.");
-  if (!filters.skills.length) throw new Error("Add at least one skill criterion.");
   if (filters.skills.length > 50) throw new Error("Candidate search supports at most 50 skill criteria.");
   return { ...filters, skills: filters.skills.map(item => ({ ...item })), page: 1, page_size: 20 };
 }
@@ -22,5 +21,15 @@ export function submitSearch(filters: SearchFilters): SubmittedSearch {
 export function pageFor(search: SubmittedSearch, page: number): SubmittedSearch {
   if (!Number.isInteger(page) || page < 1) throw new Error("Page must be a positive whole number.");
   return { ...search, skills: search.skills.map(item => ({ ...item })), page };
+}
+
+/**
+ * Results belong to the request that produced them. Once the selected company
+ * changes, anything already on screen came from a different organization and
+ * must not be presented as its results.
+ */
+export function isStaleResult(submitted: SubmittedSearch | null, currentOrganizationId: string): boolean {
+  if (!submitted) return true;
+  return submitted.organization_id !== currentOrganizationId;
 }
 

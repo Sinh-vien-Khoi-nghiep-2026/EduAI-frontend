@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { CheckCircle2, ShieldCheck, XCircle } from "lucide-react";
+import { Check, Copy, ExternalLink } from "lucide-react";
 import { type FormEvent, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { arbor } from "@/api/arbor";
@@ -26,21 +26,64 @@ const decisionHelp: Record<Decision, string> = {
   revoked: "Withdraws a previous verification at the current revision.",
 };
 
+function statusTone(status: string): "success" | "danger" | "warning" | "neutral" {
+  if (status === "verified") return "success";
+  if (status === "rejected") return "danger";
+  if (status === "revoked") return "warning";
+  return "neutral";
+}
+
 export default function AdminReviews() {
   const { token } = useSession();
   const client = useQueryClient();
-  const organizations = useQuery({ queryKey: ["organizations"], queryFn: () => arbor.organizations(token!) });
   const [params] = useSearchParams();
+
+  // Primary: new review organizations endpoint
+  const reviewOrgsQuery = useQuery({
+    queryKey: ["review-organizations"],
+    queryFn: () => arbor.reviewOrganizations(token!),
+    enabled: Boolean(token),
+  });
+
+  // Fallback: /organizations/mine
+  const fallbackOrgsQuery = useQuery({
+    queryKey: ["organizations"],
+    queryFn: () => arbor.organizations(token!),
+    enabled: Boolean(token) && reviewOrgsQuery.isError,
+  });
+
+  const eligible = reviewOrgsQuery.data ?? reviewOrganizations(fallbackOrgsQuery.data);
+
   const [organizationId, setOrganizationId] = useState("");
-  // The admin evidence list deep-links here with the row preselected.
   const [evidenceId, setEvidenceId] = useState(params.get("evidence") ?? "");
   const [status, setStatus] = useState<Decision>("verified");
   const [note, setNote] = useState("");
   const [formError, setFormError] = useState<Error>();
   const [receipt, setReceipt] = useState<{ id: string; status: string; revision: number }>();
+  const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [copyError, setCopyError] = useState<string | null>(null);
 
-  const eligible = reviewOrganizations(organizations.data);
-  const selectedOrganization = eligible.find(org => org.id === organizationId);
+  // Copied value is the complete UUID: reviewers paste it into the manual form
+  // or share it with the learner, so a truncated ID would be useless.
+  const copyId = async (id: string) => {
+    try {
+      await navigator.clipboard.writeText(id);
+      setCopiedId(id);
+      setCopyError(null);
+      setTimeout(() => setCopiedId(prev => (prev === id ? null : prev)), 2000);
+    } catch (cause) {
+      setCopiedId(null);
+      setCopyError(`Clipboard copy failed: ${formatError(cause)}`);
+      setTimeout(() => setCopyError(null), 3000);
+    }
+  };
+
+  // Fetch learners and evidence for the selected organization
+  const detailQuery = useQuery({
+    queryKey: ["review-organization-detail", organizationId],
+    queryFn: () => arbor.reviewOrganizationDetail(token!, organizationId),
+    enabled: Boolean(token && organizationId),
+  });
 
   const review = useMutation({
     mutationFn: (body: { evidenceId: string; organizationId: string; status: Decision; note?: string }) =>
@@ -53,15 +96,14 @@ export default function AdminReviews() {
       setReceipt({ id: result.id, status: result.status, revision: result.evidence_revision });
       setEvidenceId("");
       setNote("");
+      void client.invalidateQueries({ queryKey: ["review-organization-detail", organizationId] });
       void client.invalidateQueries({ queryKey: ["my-skills"] });
-      // A decision changes evidence status, so the queue and the analytics
-      // counters derived from it are stale until refetched.
       void client.invalidateQueries({ queryKey: ["admin-evidence"] });
       void client.invalidateQueries({ queryKey: ["admin-analytics"] });
     },
   });
 
-  function submit(event: FormEvent<HTMLFormElement>) {
+  function submitManual(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setFormError(undefined);
     setReceipt(undefined);
@@ -80,9 +122,21 @@ export default function AdminReviews() {
     );
   }
 
-  if (organizations.isLoading) return <LoadingBlock label="Checking review eligibility…" />;
-  if (organizations.isError) {
-    return <ErrorBlock message={formatError(organizations.error)} retry={() => void organizations.refetch()} />;
+  function handleDecision(evId: string, decisionStatus: Decision) {
+    setFormError(undefined);
+    setReceipt(undefined);
+    if (!organizationId) {
+      setFormError(new Error("Choose an organization first."));
+      return;
+    }
+    review.mutate(
+      { evidenceId: evId, organizationId, status: decisionStatus },
+      { onError: setFormError },
+    );
+  }
+
+  if (reviewOrgsQuery.isLoading || (reviewOrgsQuery.isError && fallbackOrgsQuery.isLoading)) {
+    return <LoadingBlock label="Checking review eligibility…" />;
   }
 
   return (
@@ -90,7 +144,7 @@ export default function AdminReviews() {
       <PageHeader
         eyebrow="Organization scope"
         title="Evidence review"
-        description="Review a known evidence ID inside an approved organization you belong to. This API has no pending-review queue, so nothing is listed until an ID exists."
+        description="Review submitted evidence for learners belonging to your approved review organizations."
       />
 
       {eligible.length === 0 ? (
@@ -101,10 +155,192 @@ export default function AdminReviews() {
           />
         </Panel>
       ) : (
-        <div className="admin-grid admin-grid-review">
+        <>
+          <Panel>
+            <div className="modal-fields" style={{ maxWidth: 420 }}>
+              <Field label="Reviewing organization" error={fieldError(formError, "organization_id")}>
+                <select
+                  value={organizationId}
+                  onChange={event => {
+                    setOrganizationId(event.target.value);
+                    setReceipt(undefined);
+                    setFormError(undefined);
+                  }}
+                  required
+                >
+                  <option value="">Select an organization to review</option>
+                  {eligible.map(org => (
+                    <option key={org.id} value={org.id}>
+                      {org.name} · {org.role}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+            </div>
+          </Panel>
+
+          {receipt && (
+            <Panel className="admin-receipt">
+              <Status tone={receipt.status === "verified" ? "success" : receipt.status === "rejected" ? "danger" : "warning"}>
+                {receipt.status}
+              </Status>
+              <p>
+                Decision recorded for evidence revision <strong>{receipt.revision}</strong>.
+              </p>
+              <code className="admin-code admin-ellipsis">{receipt.id}</code>
+            </Panel>
+          )}
+
+          {formError && <p className="form-error">{formatError(formError)}</p>}
+          {copyError && <p className="form-error">{copyError}</p>}
+
+          {organizationId ? (
+            <div className="stack">
+              {detailQuery.isLoading && <LoadingBlock label="Loading learners and evidence…" />}
+              {detailQuery.isError && (
+                <ErrorBlock
+                  message={formatError(detailQuery.error)}
+                  retry={() => void detailQuery.refetch()}
+                />
+              )}
+              {detailQuery.data && (
+                <>
+                  {detailQuery.data.learners.length === 0 ? (
+                    <Panel>
+                      <p className="admin-note">
+                        No learners found for this organization. Learners must belong to the organization or share evidence scope with it.
+                      </p>
+                    </Panel>
+                  ) : (
+                    detailQuery.data.learners.map(learner => (
+                      <Panel key={learner.user_id}>
+                        <div className="admin-card-head" style={{ marginBottom: "0.75rem" }}>
+                          <div>
+                            <strong>{learner.display_name ?? "Learner"}</strong>
+                            <small className="muted" style={{ marginLeft: "0.5rem" }}>
+                              {learner.email ?? learner.user_id}
+                            </small>
+                          </div>
+                          <Status tone="neutral">
+                            {learner.evidence.length} {learner.evidence.length === 1 ? "evidence" : "pieces of evidence"}
+                          </Status>
+                        </div>
+
+                        {learner.evidence.length === 0 ? (
+                          <p className="admin-note">No evidence submitted yet.</p>
+                        ) : (
+                          <div className="table-wrap">
+                            <table className="data-table admin-table">
+                              <thead>
+                                <tr>
+                                  <th scope="col">Title</th>
+                                  <th scope="col">Source</th>
+                                  <th scope="col">Status</th>
+                                  <th scope="col">Revision</th>
+                                  <th scope="col">URL</th>
+                                  <th scope="col">Actions</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {learner.evidence.map(ev => (
+                                  <tr key={ev.id}>
+                                    <td data-label="Title">
+                                      <strong>{ev.title}</strong>
+                                      <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", marginTop: 4 }}>
+                                        <code
+                                          className="admin-code"
+                                          style={{ userSelect: "all", fontSize: 11, wordBreak: "break-all" }}
+                                        >
+                                          {ev.id}
+                                        </code>
+                                        <Button
+                                          variant="quiet"
+                                          aria-label={`Copy evidence ID ${ev.id}`}
+                                          onClick={() => void copyId(ev.id)}
+                                          style={{ padding: "2px 6px", height: "auto", fontSize: 11 }}
+                                        >
+                                          {copiedId === ev.id ? (
+                                            <span style={{ display: "inline-flex", alignItems: "center", gap: 3, color: "#1f6a4b" }}>
+                                              <Check size={12} /> Copied
+                                            </span>
+                                          ) : (
+                                            <span style={{ display: "inline-flex", alignItems: "center", gap: 3 }}>
+                                              <Copy size={12} /> Copy ID
+                                            </span>
+                                          )}
+                                        </Button>
+                                      </div>
+                                    </td>
+                                    <td data-label="Source">
+                                      <span className="muted">{ev.source}</span>
+                                    </td>
+                                    <td data-label="Status">
+                                      <Status tone={statusTone(ev.status)}>{ev.status}</Status>
+                                    </td>
+                                    <td data-label="Revision">r{ev.revision}</td>
+                                    <td data-label="URL">
+                                      {ev.url ? (
+                                        <a
+                                          href={ev.url}
+                                          target="_blank"
+                                          rel="noopener noreferrer"
+                                          className="admin-card-link"
+                                        >
+                                          Link <ExternalLink size={13} />
+                                        </a>
+                                      ) : (
+                                        "—"
+                                      )}
+                                    </td>
+                                    <td data-label="Actions">
+                                      <div style={{ display: "flex", gap: "0.35rem", flexWrap: "wrap" }}>
+                                        <Button
+                                          variant="primary"
+                                          disabled={review.isPending}
+                                          onClick={() => handleDecision(ev.id, "verified")}
+                                        >
+                                          Verify
+                                        </Button>
+                                        <Button
+                                          variant="secondary"
+                                          disabled={review.isPending}
+                                          onClick={() => handleDecision(ev.id, "rejected")}
+                                        >
+                                          Reject
+                                        </Button>
+                                        <Button
+                                          variant="danger"
+                                          disabled={review.isPending}
+                                          onClick={() => handleDecision(ev.id, "revoked")}
+                                        >
+                                          Revoke
+                                        </Button>
+                                      </div>
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        )}
+                      </Panel>
+                    ))
+                  )}
+                </>
+              )}
+            </div>
+          ) : (
+            <Panel>
+              <p className="admin-note">Choose an organization above to view its learners and pending evidence.</p>
+            </Panel>
+          )}
+
           <Panel className="admin-form-panel">
-            <form onSubmit={submit} noValidate>
-              <h2 className="admin-form-title">Record a decision</h2>
+            <h2 className="admin-form-title">Manual evidence entry</h2>
+            <p className="admin-note" style={{ marginBottom: "1rem" }}>
+              Have a direct evidence UUID? You can review it manually here.
+            </p>
+            <form onSubmit={submitManual} noValidate>
               <div className="stack modal-fields">
                 <Field
                   label="Evidence ID"
@@ -117,22 +353,7 @@ export default function AdminReviews() {
                     placeholder="00000000-0000-0000-0000-000000000000"
                     spellCheck={false}
                     autoComplete="off"
-                    required
                   />
-                </Field>
-                <Field label="Organization" error={fieldError(formError, "organization_id")}>
-                  <select
-                    value={organizationId}
-                    onChange={event => setOrganizationId(event.target.value)}
-                    required
-                  >
-                    <option value="">Select an organization</option>
-                    {eligible.map(org => (
-                      <option key={org.id} value={org.id}>
-                        {org.name} · {org.role}
-                      </option>
-                    ))}
-                  </select>
                 </Field>
                 <fieldset className="admin-decisions">
                   <legend>Decision</legend>
@@ -140,7 +361,7 @@ export default function AdminReviews() {
                     <label key={option} className={status === option ? "admin-decision selected" : "admin-decision"}>
                       <input
                         type="radio"
-                        name="status"
+                        name="manual-status"
                         value={option}
                         checked={status === option}
                         onChange={() => setStatus(option)}
@@ -151,53 +372,17 @@ export default function AdminReviews() {
                   ))}
                 </fieldset>
                 <Field label="Note" hint="Optional, stored on the verification record" error={fieldError(formError, "note")}>
-                  <textarea value={note} onChange={event => setNote(event.target.value)} rows={3} />
+                  <textarea value={note} onChange={event => setNote(event.target.value)} rows={2} />
                 </Field>
               </div>
-              {formError && <p className="form-error">{formatError(formError)}</p>}
-              <div className="form-actions">
+              <div className="form-actions" style={{ marginTop: "1rem" }}>
                 <Button type="submit" disabled={review.isPending}>
                   {review.isPending ? "Submitting…" : "Submit decision"}
                 </Button>
               </div>
             </form>
           </Panel>
-
-          <div className="stack">
-            <Panel className="admin-context">
-              <h2 className="admin-form-title">Who this applies to</h2>
-              <p>
-                The backend accepts the review only when the learner belongs to{" "}
-                <strong>{selectedOrganization?.name ?? "the selected organization"}</strong> or has
-                shared evidence or verification scope with it. Otherwise it returns 403{" "}
-                <code>learner_scope_required</code>.
-              </p>
-              <ul className="admin-facts">
-                <li>
-                  <ShieldCheck size={15} aria-hidden /> Reviewer or admin role required in an approved organization
-                </li>
-                <li>
-                  <CheckCircle2 size={15} aria-hidden /> Success returns the verification record ID
-                </li>
-                <li>
-                  <XCircle size={15} aria-hidden /> Editing the evidence afterwards invalidates the decision
-                </li>
-              </ul>
-            </Panel>
-
-            {receipt && (
-              <Panel className="admin-receipt">
-                <Status tone={receipt.status === "verified" ? "success" : receipt.status === "rejected" ? "danger" : "warning"}>
-                  {receipt.status}
-                </Status>
-                <p>
-                  Decision recorded for evidence revision <strong>{receipt.revision}</strong>.
-                </p>
-                <code className="admin-code admin-ellipsis">{receipt.id}</code>
-              </Panel>
-            )}
-          </div>
-        </div>
+        </>
       )}
     </div>
   );

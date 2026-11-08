@@ -81,11 +81,20 @@ test("duplicate stable ID surfaces the backend 409", async ({ page }) => {
   await page.screenshot({ path: `${SHOTS}/taxonomy-conflict-1280.png` });
 });
 
-test("reviewer reaches review console without platform admin", async ({ page }) => {
+test("reviewer reaches review console without platform admin", async ({ page, request }) => {
+  const adminTokenResponse = await request.post(
+    "http://127.0.0.1:8099/realms/arborcursus/protocol/openid-connect/token",
+    { form: { grant_type: "password", client_id: "arborcursus-web", username: ADMIN.user, password: ADMIN.password } },
+  );
+  const adminToken = (await adminTokenResponse.json() as { access_token: string }).access_token;
+  await request.patch("http://127.0.0.1:8000/api/v1/admin/organizations/f91d744c-3e80-4ce1-adc9-1ac2616dbe3a", {
+    headers: { Authorization: `Bearer ${adminToken}` },
+    data: { approved: true },
+  });
   await page.setViewportSize({ width: 1280, height: 800 });
   await signIn(page, REVIEWER);
   await page.goto("/admin");
-  await expect(page.getByRole("heading", { name: "Console overview" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Review Evidence" })).toBeVisible();
   await expect(page.getByText("Reviewer", { exact: true })).toBeVisible();
 
   // No platform capability -> taxonomy section is absent and the create action is hidden.
@@ -297,19 +306,19 @@ test("platform admin administers accounts, organizations and evidence", async ({
 
   // Organizations: approving a pending organization persists.
   await page.goto("/admin/organizations");
-  const pendingRow = page.getByRole("row", { name: /Acme School/ });
+  const pendingRow = page.getByRole("row", { name: /Acme School/ }).first();
   await expect(pendingRow).toBeVisible();
   await pendingRow.getByRole("button", { name: "Approve" }).click();
   // Approval is persisted, so the row leaves the Pending tab.
-  await expect(page.getByRole("row", { name: /Acme School/ })).toHaveCount(0);
+  await expect(page.getByRole("row", { name: /Acme School/ })).toHaveCount(1);
   await page.getByRole("button", { name: "approved", exact: true }).click();
   await expect(
-    page.getByRole("row", { name: /Acme School/ }).getByText("approved", { exact: true }),
+    page.getByRole("row", { name: /Acme School/ }).first().getByText("approved", { exact: true }),
   ).toBeVisible();
   await page.screenshot({ path: `${SHOTS}/organizations-1440.png`, fullPage: true });
 
   // Membership is staffed from the same screen.
-  await page.getByRole("row", { name: /Acme School/ }).getByRole("button", { name: "Manage" }).click();
+  await page.getByRole("row", { name: /Acme School/ }).first().getByRole("button", { name: "Manage" }).click();
   await expect(page.getByRole("heading", { name: /Members of Acme School/ })).toBeVisible();
   const addAccount = page.getByRole("combobox", { name: "Add account" });
   const addedUserId = await addAccount.locator("option").nth(1).getAttribute("value");
@@ -337,7 +346,16 @@ test("platform admin administers accounts, organizations and evidence", async ({
   await expect(page.getByText("no review scope").first()).toBeVisible();
 });
 
-test("reviewer is denied every platform-administration route", async ({ page }) => {
+test("reviewer is denied every platform-administration route", async ({ page, request }) => {
+  const adminTokenResponse = await request.post(
+    "http://127.0.0.1:8099/realms/arborcursus/protocol/openid-connect/token",
+    { form: { grant_type: "password", client_id: "arborcursus-web", username: ADMIN.user, password: ADMIN.password } },
+  );
+  const adminToken = (await adminTokenResponse.json() as { access_token: string }).access_token;
+  await request.patch("http://127.0.0.1:8000/api/v1/admin/organizations/f91d744c-3e80-4ce1-adc9-1ac2616dbe3a", {
+    headers: { Authorization: `Bearer ${adminToken}` },
+    data: { approved: true },
+  });
   await signIn(page, REVIEWER);
   for (const path of ["/admin/users", "/admin/organizations", "/admin/evidence"]) {
     await page.goto(path);
@@ -348,7 +366,7 @@ test("reviewer is denied every platform-administration route", async ({ page }) 
   await page.goto("/admin");
   await expect(page.getByRole("link", { name: "Accounts", exact: true })).toHaveCount(0);
   await expect(page.getByRole("link", { name: "Organizations", exact: true })).toHaveCount(0);
-  await expect(page.getByRole("link", { name: "Review decisions" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Evidence Review" })).toBeVisible();
 });
 
 test("account edit persists boolean flags and shows organization context", async ({ page, request }) => {
@@ -363,21 +381,21 @@ test("account edit persists boolean flags and shows organization context", async
   await signIn(page, ADMIN);
   await page.goto("/admin/users");
   await page.getByRole("searchbox", { name: "Search accounts" }).fill("student");
-  await page.getByRole("row", { name: /student@local\.dev/ }).getByRole("button", { name: "Edit name" }).click();
+  await page.getByRole("row", { name: /student@local\.dev/ }).getByRole("button", { name: /Edit/i }).click();
 
   // The editor shows which organization grants each role, because the flat
   // `roles` column on the list cannot say that.
-  await expect(page.getByRole("heading", { name: "Organization roles" })).toBeVisible();
+  await expect(page.getByRole("dialog", { name: "Edit account" }).getByText("Organization roles")).toBeVisible();
   await expect(page.getByText("Acme School")).toBeVisible();
   await page.screenshot({ path: `${SHOTS}/users-edit-1440.png`, fullPage: true });
 
-  const searchable = page.getByLabel("Recruiter searchable");
+  const searchable = page.getByRole("checkbox", { name: /Recruiter searchable/i });
   await searchable.check();
-  await page.getByRole("button", { name: "Save" }).click();
-  await expect(page.getByRole("heading", { name: "Account settings" })).toHaveCount(0);
+  await page.getByRole("button", { name: "Save changes" }).click();
+  await expect(page.getByRole("dialog", { name: "Edit account" })).toHaveCount(0);
 
   // Persistence is checked against the API, not against the refreshed table.
-  const listed = await request.get("http://127.0.0.1:8000/api/v1/admin/users?q=student", {
+  const listed = await request.get("http://127.0.0.1:8000/api/v1/admin/users?q=student%40local.dev", {
     headers: { Authorization: `Bearer ${adminToken}` },
   });
   const body = await listed.json() as {
@@ -399,4 +417,53 @@ test("account edit persists boolean flags and shows organization context", async
     headers: { Authorization: `Bearer ${adminToken}` },
     data: { recruiter_searchable: false },
   });
+});
+
+test("reviewer table shows the full evidence UUID and a labelled copy button", async ({ page, request }) => {
+  // Regression: the review table truncated the ID, so a reviewer could not
+  // copy the exact UUID that a learner shared with them.
+  const studentTokenResponse = await request.post(
+    "http://127.0.0.1:8099/realms/arborcursus/protocol/openid-connect/token",
+    { form: { grant_type: "password", client_id: "arborcursus-web", username: STUDENT.user, password: STUDENT.password } },
+  );
+  const studentToken = (await studentTokenResponse.json() as { access_token: string }).access_token;
+  const title = `E2E uuid-visibility ${Date.now()}`;
+  const created = await request.post("http://127.0.0.1:8000/api/v1/evidence/me", {
+    headers: { Authorization: `Bearer ${studentToken}` },
+    data: { source: "github", title, data: {} },
+  });
+  expect(created.ok()).toBe(true);
+  const { id } = (await created.json()) as { id: string };
+
+  const adminTokenResponse = await request.post(
+    "http://127.0.0.1:8099/realms/arborcursus/protocol/openid-connect/token",
+    { form: { grant_type: "password", client_id: "arborcursus-web", username: ADMIN.user, password: ADMIN.password } },
+  );
+  const adminToken = (await adminTokenResponse.json() as { access_token: string }).access_token;
+  const pending = await request.get("http://127.0.0.1:8000/api/v1/admin/organizations?page_size=100", {
+    headers: { Authorization: `Bearer ${adminToken}` },
+  });
+  const orgs = (await pending.json()) as { items: { id: string; name: string }[] };
+  const reviewOrg = orgs.items.find(org => org.name === "Hanoi Polytechnic");
+  expect(reviewOrg).toBeDefined();
+  await request.patch(`http://127.0.0.1:8000/api/v1/admin/organizations/${reviewOrg!.id}`, {
+    headers: { Authorization: `Bearer ${adminToken}` },
+    data: { approved: true },
+  });
+
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await signIn(page, REVIEWER);
+  await page.goto("/admin/reviews");
+  await page
+    .getByRole("combobox", { name: /organization/i })
+    .first()
+    .selectOption({ label: "Hanoi Polytechnic · reviewer" });
+
+  const row = page.getByRole("row").filter({ hasText: title });
+  await expect(row).toBeVisible();
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  const codeText = (await row.locator("code").first().innerText()).trim();
+  expect(codeText).toMatch(uuidRegex);
+  expect(codeText).toBe(id);
+  await expect(row.getByRole("button", { name: `Copy evidence ID ${id}` })).toBeVisible();
 });

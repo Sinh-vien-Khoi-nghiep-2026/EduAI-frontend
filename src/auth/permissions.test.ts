@@ -5,6 +5,7 @@ import {
   canAccessConsole,
   decodeClaims,
   isPlatformAdmin,
+  isReviewerOnly,
   reviewOrganizations,
 } from "./permissions";
 
@@ -81,4 +82,16 @@ test("ordinary users have no console access", () => {
 test("each capability unlocks the console on its own", () => {
   expect(canAccessConsole(capabilitiesFor({ platform_admin: true }, []))).toBeTrue();
   expect(canAccessConsole(capabilitiesFor({}, [org({ role: "reviewer" })]))).toBeTrue();
+});
+
+test("isReviewerOnly distinguishes reviewer accounts from platform admins and ordinary users", () => {
+  const reviewerCaps = capabilitiesFor({}, [org({ role: "reviewer" })]);
+  const adminCaps = capabilitiesFor({ platform_admin: true }, []);
+  const multiCaps = capabilitiesFor({ platform_admin: true }, [org({ role: "reviewer" })]);
+  const emptyCaps = capabilitiesFor({}, [org({ role: "member" })]);
+
+  expect(isReviewerOnly(reviewerCaps)).toBeTrue();
+  expect(isReviewerOnly(adminCaps)).toBeFalse();
+  expect(isReviewerOnly(multiCaps)).toBeFalse();
+  expect(isReviewerOnly(emptyCaps)).toBeFalse();
 });

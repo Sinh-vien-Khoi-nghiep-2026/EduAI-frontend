@@ -79,3 +79,15 @@ export function capabilitiesFor(
 export function canAccessConsole(capabilities: Set<Capability>): boolean {
   return capabilities.size > 0;
 }
+
+/**
+ * Reviewer-only accounts can review evidence for approved organizations but
+ * do not hold platform administration capabilities.
+ */
+export function isReviewerOnly(capabilities: Set<Capability>): boolean {
+  return (
+    capabilities.has("evidence.review") &&
+    !capabilities.has("taxonomy.write") &&
+    !capabilities.has("users.manage")
+  );
+}

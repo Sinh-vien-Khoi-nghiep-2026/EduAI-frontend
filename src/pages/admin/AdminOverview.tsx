@@ -2,7 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { ArrowRight, Building2, ClipboardList, GraduationCap, ShieldCheck, Users } from "lucide-react";
 import { Link } from "react-router-dom";
 import { arbor } from "@/api/arbor";
-import { capabilitiesFor, decodeClaims, reviewOrganizations } from "@/auth/permissions";
+import { capabilitiesFor, decodeClaims, isReviewerOnly, reviewOrganizations } from "@/auth/permissions";
 import { useSession } from "@/auth/session";
 import { countSkills } from "@/features/taxonomy";
 import { ErrorBlock, LoadingBlock, PageHeader, Panel, Status } from "@/components/app-ui";
@@ -20,11 +20,105 @@ export default function AdminOverview() {
   const capabilities = capabilitiesFor(decodeClaims(token), organizations.data);
   const reviewerOrgs = reviewOrganizations(organizations.data);
   const counts = skills.data ? countSkills(skills.data) : undefined;
+  const reviewerOnly = isReviewerOnly(capabilities);
 
-  if (organizations.isLoading || skills.isLoading || analytics.isLoading) {
+  // The reviewer branch must not wait on data a reviewer cannot fetch: `skills`
+  // and `admin-analytics` are platform-admin endpoints (403 for a reviewer).
+  if (organizations.isLoading) return <LoadingBlock label="Loading console summary…" />;
+  if (organizations.isError) {
+    return (
+      <ErrorBlock
+        message="The console summary could not be loaded."
+        retry={() => void organizations.refetch()}
+      />
+    );
+  }
+
+  if (reviewerOnly) {
+    return (
+      <div className="stack">
+        <PageHeader
+          eyebrow="Review workspace"
+          title="Review Evidence"
+          description="Review submitted evidence for your approved organizations."
+        />
+
+        <div className="admin-metrics">
+          <Panel className="admin-metric">
+            <span>Review organizations</span>
+            <strong>{reviewerOrgs.length}</strong>
+            <small>Approved memberships with reviewer or admin role</small>
+          </Panel>
+        </div>
+
+        <div className="admin-grid">
+          <Panel className="admin-card">
+            <div className="admin-card-head">
+              <ShieldCheck size={18} />
+              <h2>Evidence review</h2>
+              <Status tone={reviewerOrgs.length ? "success" : "warning"}>
+                {reviewerOrgs.length ? "Available" : "No eligible org"}
+              </Status>
+            </div>
+            <p>
+              Browse evidence submissions by approved organization. Select an organization to view eligible
+              learners and their evidence, and record verification decisions.
+            </p>
+            <Link to="/admin/reviews" className="admin-card-link">
+              Open reviews <ArrowRight size={15} />
+            </Link>
+          </Panel>
+        </div>
+
+        <Panel>
+          <h2 className="admin-form-title">Eligible review organizations</h2>
+          {reviewerOrgs.length === 0 ? (
+            <p className="admin-note">You have no approved organizations with reviewer or admin permissions.</p>
+          ) : (
+            <div className="table-wrap">
+              <table className="data-table admin-table">
+                <thead>
+                  <tr>
+                    <th scope="col">Organization</th>
+                    <th scope="col">Kind</th>
+                    <th scope="col">Your role</th>
+                    <th scope="col">Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {reviewerOrgs.map(org => (
+                    <tr key={org.id}>
+                      <td data-label="Organization">
+                        <strong>{org.name}</strong>
+                      </td>
+                      <td data-label="Kind">
+                        <span className="muted">{org.kind}</span>
+                      </td>
+                      <td data-label="Your role">
+                        <code className="admin-code">{org.role}</code>
+                      </td>
+                      <td data-label="Action">
+                        <Link to="/admin/reviews" className="admin-card-link">
+                          Review evidence <ArrowRight size={14} />
+                        </Link>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </Panel>
+      </div>
+    );
+  }
+
+  // Platform-admin rendering is unchanged: it still waits for the taxonomy and
+  // analytics queries this branch actually renders.
+  if (skills.isLoading || analytics.isLoading) {
     return <LoadingBlock label="Loading console summary…" />;
   }
-  if (organizations.isError || skills.isError) {
+  if (skills.isError) {
     return (
       <ErrorBlock
         message="The console summary could not be loaded."
@@ -108,8 +202,8 @@ export default function AdminOverview() {
             </Status>
           </div>
           <p>
-            Reviews take a known evidence ID: the API has no review queue or pending list. Decisions
-            are scoped to an approved organization where you are reviewer or admin.
+            Browse evidence submissions by approved organization. Select an organization to view eligible
+            learners and their evidence, and record verification decisions.
           </p>
           <Link to="/admin/reviews" className="admin-card-link">
             Open reviews <ArrowRight size={15} />

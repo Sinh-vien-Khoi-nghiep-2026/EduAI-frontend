@@ -45,11 +45,10 @@ Documented, not faked. No screen, endpoint stub, or mock data exists for any of 
 
 `src/auth/permissions.ts` derives capabilities client-side:
 
-- `taxonomy.write` — truthy `platform_admin` claim in the JWT payload. Mirrors the backend's Python
-  `bool()` semantics (`""`, `0`, `false`, `null` are falsy), and also accepts Keycloak
-  `roles` / `realm_access.roles` containers.
+- `taxonomy.write` — strictly boolean `true` `platform_admin` claim in the JWT payload (matching backend `is_platform_admin`). Role containers are not consulted.
 - `evidence.review` — at least one organization from `/organizations/mine` with `approved: true`
   and role `reviewer` or `admin`.
+- `isReviewerOnly` — accounts with `evidence.review` that lack `taxonomy.write` and `users.manage`.
 
 Rules enforced by `src/auth/AdminGuard.tsx` and tested in `src/auth/permissions.test.ts`:
 
@@ -67,14 +66,15 @@ never offered the action).
 
 | Route | Purpose | Capability |
 |---|---|---|
-| `/admin` | Real counts from real endpoints, capability summary, known gaps | any |
+| `/admin` | Overview: "Review Evidence" for reviewer-only; "Console overview" with platform metrics for platform admin | any |
 | `/admin/taxonomy` | Tree list, filter, create with client+server validation | view: any; create: `taxonomy.write` |
 | `/admin/reviews` | ID-based evidence decision within an eligible organization | `evidence.review` |
 | `/admin/access` | Token capabilities, review scope, all memberships | any |
 
 The console has its own shell (`AdminLayout`) as a sibling of the learner `AppLayout`, so the
-workspace sidebar is never doubled. A "Admin console" entry appears in the workspace sidebar only
-when a capability exists; "Back to workspace" returns.
+workspace sidebar is never doubled. Accounts with only `evidence.review` see the entry link and
+workspace titled **"Review Evidence"** with reviewer-scoped navigation, while platform admins and
+multi-role accounts retain the full **"Admin console"**. "Back to workspace" returns.
 
 ## Local verification stack
 

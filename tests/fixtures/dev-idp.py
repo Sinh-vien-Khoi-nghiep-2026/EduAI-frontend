@@ -44,6 +44,7 @@ USERS = {
     "admin@local.dev": ("admin", "sub-platform-admin", "Platform Admin", "admin@local.dev", {"platform_admin": True}),
     "reviewer@local.dev": ("reviewer", "sub-reviewer", "Riley Reviewer", "reviewer@local.dev", {}),
     "student@local.dev": ("student", "sub-student", "Sam Student", "student@local.dev", {}),
+    "student2@local.dev": ("student2", "sub-student-2", "Alex Student", "student2@local.dev", {}),
 }
 CODES: dict[str, dict] = {}
 REFRESH: dict[str, str] = {}

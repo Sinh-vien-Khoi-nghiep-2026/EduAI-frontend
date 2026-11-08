@@ -82,6 +82,66 @@ export function countSkills(skills: Skill[]): { total: number; roots: number } {
     roots: skills.filter(skill => !skill.parent_id || !ids.has(skill.parent_id)).length,
   };
 }
+export function descendantIds(skills: Skill[], id: string): Set<string> {
+  const childrenMap = new Map<string, string[]>();
+  for (const skill of skills) {
+    if (skill.parent_id) {
+      const list = childrenMap.get(skill.parent_id);
+      if (list) list.push(skill.id);
+      else childrenMap.set(skill.parent_id, [skill.id]);
+    }
+  }
+
+  const result = new Set<string>();
+  const queue = childrenMap.get(id) ? [...childrenMap.get(id)!] : [];
+  while (queue.length > 0) {
+    const current = queue.shift()!;
+    if (result.has(current)) continue;
+    result.add(current);
+    const children = childrenMap.get(current);
+    if (children) {
+      for (const childId of children) {
+        if (!result.has(childId)) {
+          queue.push(childId);
+        }
+      }
+    }
+  }
+  return result;
+}
+
+export function parentOptionsFor(skills: Skill[], id: string | null): Skill[] {
+  const sorted = [...skills].sort(byName);
+  if (!id) return sorted;
+  const invalid = descendantIds(skills, id);
+  invalid.add(id);
+  return sorted.filter(skill => !invalid.has(skill.id));
+}
+
+/**
+ * Collapse suppression only applies to an unfiltered tree: while a search query
+ * is active the tree is already reduced to matches plus their ancestors, so
+ * honouring a collapsed ancestor would hide the very match the user searched for.
+ */
+export function visibleRows(tree: SkillNode[], collapsed: Set<string>, query = ""): SkillNode[] {
+  if (query.trim()) return tree;
+  if (collapsed.size === 0) return tree;
+  const result: SkillNode[] = [];
+  let hidingAtOrBelowDepth: number | null = null;
+  for (const node of tree) {
+    if (hidingAtOrBelowDepth !== null) {
+      if (node.depth > hidingAtOrBelowDepth) {
+        continue;
+      }
+      hidingAtOrBelowDepth = null;
+    }
+    result.push(node);
+    if (collapsed.has(node.id)) {
+      hidingAtOrBelowDepth = node.depth;
+    }
+  }
+  return result;
+}
 
 function byName(a: Skill, b: Skill) {
   return a.name.localeCompare(b.name) || a.stable_id.localeCompare(b.stable_id);
