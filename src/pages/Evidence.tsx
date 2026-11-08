@@ -110,7 +110,7 @@ export default function Evidence() {
     }
   };
 
-  const save = useMutation<EvidenceResult, Error, FormData>({
+  const save = useMutation<EvidenceResult | { noop: true }, Error, FormData>({
     mutationFn: async (data: FormData) => {
       const values = {
         source: String(data.get("source")),
@@ -132,6 +132,10 @@ export default function Evidence() {
       if (!evidenceId) throw new Error("Enter an evidence ID.");
       if (mode === "edit") {
         const patch: EvidencePatchInput = buildEvidencePatch(values, editSnapshot, editData);
+        // Row edit knows the original, so an empty patch means the user changed
+        // nothing. Sending it would still bump the revision server-side and
+        // invalidate an existing verification, so do not send it at all.
+        if (Object.keys(patch).length === 0) return { noop: true };
         return arbor.updateEvidence(token!, evidenceId, patch);
       }
       const status = String(data.get("status"));
@@ -143,6 +147,11 @@ export default function Evidence() {
       });
     },
     onSuccess: result => {
+      if ("noop" in result) {
+        close();
+        setNotice("Nothing to update.");
+        return;
+      }
       void client.invalidateQueries({ queryKey: ["my-skills"] });
       void client.invalidateQueries({ queryKey: ["my-evidence", token] });
       setNotice("revision" in result ? `Evidence saved. Keep this ID for skill links or review: ${result.id}` : `Review submitted for evidence revision ${result.evidence_revision}.`);
@@ -158,7 +167,10 @@ export default function Evidence() {
   }
 
   const reviewer = organizations.data?.filter(org => org.approved && (org.role === "reviewer" || org.role === "admin")) ?? [];
-  const isManualEdit = mode === "edit" && editData === null;
+  // Row edit loaded a snapshot, so its id is pinned to that row; manual mode
+  // has no snapshot and is the only place the user may type an id.
+  const isRowEdit = mode === "edit" && editSnapshot !== null;
+  const isManualEdit = mode === "edit" && editSnapshot === null;
   const description = mode === "create"
     ? "URLs must be valid absolute URLs. Evidence is represented by its source, title, optional external ID, URL, and data object."
     : mode === "edit"
@@ -355,12 +367,21 @@ export default function Evidence() {
             ) : (
               <div className="stack modal-fields">
                 {mode === "edit" && (
-                  <Field label="Evidence ID" error={fieldError(error, "evidenceId")}>
+                  <Field
+                    label="Evidence ID"
+                    hint={isRowEdit ? "Locked to the row this dialog was opened from." : undefined}
+                    error={fieldError(error, "evidenceId")}
+                  >
                     <input
                       name="evidenceId"
                       required
                       value={editId}
-                      onChange={e => setEditId(e.target.value)}
+                      readOnly={isRowEdit}
+                      aria-readonly={isRowEdit || undefined}
+                      // Row edit must patch the record it was opened from, or a
+                      // retyped id would overwrite a different, unopened record.
+                      onChange={e => { if (!isRowEdit) setEditId(e.target.value); }}
+                      style={isRowEdit ? { background: "#eef3ef", color: "#5b6d62", cursor: "not-allowed" } : undefined}
                     />
                   </Field>
                 )}

@@ -60,14 +60,69 @@ test("changed data is included only when it actually differs", () => {
   expect(changed.data).toEqual({ sha: "def" });
 });
 
+const approvedCompany = { organization_approved: true, organization_kind: "company" };
+
 test("activeRecruiterSearchOrgIds filters inactive and non recruiter_search grants", () => {
   const ids = activeRecruiterSearchOrgIds([
-    { organization_id: "a", scope: "recruiter_search", active: true },
-    { organization_id: "b", scope: "recruiter_search", active: false },
-    { organization_id: "c", scope: "evidence", active: true },
-    { organization_id: "d", scope: "recruiter_search", active: true },
+    { organization_id: "a", scope: "recruiter_search", active: true, ...approvedCompany },
+    { organization_id: "b", scope: "recruiter_search", active: false, ...approvedCompany },
+    { organization_id: "c", scope: "evidence", active: true, ...approvedCompany },
+    { organization_id: "d", scope: "recruiter_search", active: true, ...approvedCompany },
   ]);
   expect([...ids].sort()).toEqual(["a", "d"]);
+});
+
+test("row edit with no changes produces an empty patch", () => {
+  const patch = buildEvidencePatch(
+    { source: original.source, title: original.title, url: original.url, external_id: original.external_id },
+    original,
+    original.data,
+  );
+  expect(patch).toEqual({});
+});
+
+test("row edit changing only the title sends exactly that title", () => {
+  const patch = buildEvidencePatch(
+    { source: original.source, title: "Renamed", url: original.url, external_id: original.external_id },
+    original,
+    original.data,
+  );
+  expect(patch).toEqual({ title: "Renamed" });
+  expect("source" in patch).toBe(false);
+  expect("url" in patch).toBe(false);
+});
+
+test("row edit clearing a previously set url sends url null plus only the other changed fields", () => {
+  const patch = buildEvidencePatch(
+    { source: original.source, title: "Renamed", url: "", external_id: original.external_id },
+    original,
+    original.data,
+  );
+  expect(patch).toEqual({ title: "Renamed", url: null });
+});
+
+test("activeRecruiterSearchOrgIds excludes an active grant to an unapproved company", () => {
+  const ids = activeRecruiterSearchOrgIds([
+    { organization_id: "pending-co", scope: "recruiter_search", active: true, organization_approved: false, organization_kind: "company" },
+    { organization_id: "ok-co", scope: "recruiter_search", active: true, organization_approved: true, organization_kind: "company" },
+  ]);
+  expect([...ids]).toEqual(["ok-co"]);
+});
+
+test("activeRecruiterSearchOrgIds excludes an active grant to an approved school", () => {
+  const ids = activeRecruiterSearchOrgIds([
+    { organization_id: "school", scope: "recruiter_search", active: true, organization_approved: true, organization_kind: "school" },
+  ]);
+  expect([...ids]).toEqual([]);
+});
+
+test("recruiterSharingWarning ignores grants the search cannot use", () => {
+  const unusable = activeRecruiterSearchOrgIds([
+    { organization_id: "pending-co", scope: "recruiter_search", active: true, organization_approved: false, organization_kind: "company" },
+    { organization_id: "school", scope: "recruiter_search", active: true, organization_approved: true, organization_kind: "school" },
+  ]);
+  expect(unusable.size).toBe(0);
+  expect(recruiterSharingWarning(true, unusable)).toBe("no_grant");
 });
 
 test("recruiterSharingWarning flags the two mismatched states", () => {

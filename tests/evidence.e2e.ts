@@ -176,6 +176,11 @@ test("editing only the title preserves stored metadata and bumps the revision", 
 
   const dialog = page.getByRole("dialog");
   await expect(dialog).toBeVisible();
+  // The id is pinned to the row this dialog was opened from; a retyped id
+  // would PATCH a different record the user never opened.
+  const idField = dialog.getByLabel("Evidence ID");
+  await expect(idField).toHaveAttribute("readonly", "");
+  await expect(idField).toHaveValue(evidence.id);
   const editedTitle = `${title} (edited)`;
   await dialog.getByLabel("Title").fill(editedTitle);
   await dialog.getByRole("button", { name: "Update evidence" }).click();
